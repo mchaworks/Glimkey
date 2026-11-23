@@ -128,7 +128,6 @@ class KeyPreview(ctx: Context, private val t: KbTokens) {
             face.visibility = View.VISIBLE
             face.alpha = 0.01f
             warming = true
-            bornAt = android.os.SystemClock.uptimeMillis()
             p.showAtLocation(anchor, Gravity.NO_GRAVITY, 0, 0)
             handler.postDelayed({
                 if (warming && owner == null && p.isShowing) { warming = false; face.alpha = 0f; park(p) }
@@ -163,38 +162,41 @@ class KeyPreview(ctx: Context, private val t: KbTokens) {
         fading = false
         face.animate().cancel()
         val seq = ++moveSeq
-        val now = android.os.SystemClock.uptimeMillis()
         if (p.isShowing) {
-            // Only a window that has just been created, or one woken from its parking spot, sits far from this key and
-            // may not have drawn yet: there the bubble waits one frame for the move to land (otherwise it is drawn at the
-            // old spot and runs to the key). Everywhere else the window is already near the keys: show at once, as before.
-            val lateMove = !wasSolid && (wasParked || now - bornAt < 400L)
             if (wasSolid) {
                 p.update(x - ox, y - oy, ww, wh)
                 face.alpha = 1f; face.scaleX = 1f; face.scaleY = 1f; lens?.morph = 1f
-            } else if (lateMove) {
+            } else {
+                // A window move reaches the screen a frame or two after update() returns. Starting the pop-in at once drew the
+                // bubble at the OLD spot (the warm-up window's corner, or the previous key) and it then ran to this key.
+                // So the bubble stays invisible until the move has landed, and only then grows out of the key. A key that
+                // is let go before that still gets its bubble (it just fades right after), so fast typing never skips one.
                 face.alpha = 0f
                 p.update(x - ox, y - oy, ww, wh)
-                afterFrames(1) {
-                    if (seq == moveSeq && owner === key) {
+                pendingReveal = true; releasedEarly = false
+                afterFrames(2) {
+                    if (seq == moveSeq) {
+                        pendingReveal = false
                         lens?.aim(key, glyph)
                         morphFromKey(face, lens, bw, bh, key.width, key.height, t, motionOn)
+                        if (releasedEarly) {
+                            releasedEarly = false
+                            handler.postDelayed({ if (seq == moveSeq && owner == null) dismiss() }, 90)
+                        }
                     }
                 }
-            } else {
-                p.update(x - ox, y - oy, ww, wh)
-                morphFromKey(face, lens, bw, bh, key.width, key.height, t, motionOn)
             }
         } else {
             p.width = ww; p.height = wh
-            bornAt = now
+            pendingReveal = false
             p.showAtLocation(key, Gravity.NO_GRAVITY, x - ox, y - oy)
             morphFromKey(face, lens, bw, bh, key.width, key.height, t, motionOn)
         }
     }
 
-    /** When the popup window was last added (or warmed up): a window this young may not have settled at its spot yet. */
-    private var bornAt = 0L
+    /** A bubble is waiting for its window move to land; if the key is let go meanwhile it is faded out right after it appears. */
+    private var pendingReveal = false
+    private var releasedEarly = false
 
     /** Bumped by every show() and dismiss(): a reveal that was waiting for a window move drops itself when it is stale. */
     private var moveSeq = 0
@@ -215,6 +217,8 @@ class KeyPreview(ctx: Context, private val t: KbTokens) {
     /** Quick fade-out unless [immediate]; a new [show] cancels the fade, so rolling typing never flickers. */
     fun dismiss(immediate: Boolean = false) {
         owner = null
+        if (pendingReveal && !immediate) { releasedEarly = true; return }     // the bubble is still on its way: it fades once it has appeared
+        pendingReveal = false; releasedEarly = false
         moveSeq++
         face.animate().cancel()
         val p = popup ?: return
