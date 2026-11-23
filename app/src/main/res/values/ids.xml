@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- BlurFx: last blur radius applied to a view (kept off View.tag, which other code uses for its own state) -->
+    <item name="blur_fx_radius" type="id" />
+</resources>
