@@ -128,6 +128,7 @@ class KeyPreview(ctx: Context, private val t: KbTokens) {
             face.visibility = View.VISIBLE
             face.alpha = 0.01f
             warming = true
+            bornAt = android.os.SystemClock.uptimeMillis()
             p.showAtLocation(anchor, Gravity.NO_GRAVITY, 0, 0)
             handler.postDelayed({
                 if (warming && owner == null && p.isShowing) { warming = false; face.alpha = 0f; park(p) }
@@ -162,30 +163,38 @@ class KeyPreview(ctx: Context, private val t: KbTokens) {
         fading = false
         face.animate().cancel()
         val seq = ++moveSeq
+        val now = android.os.SystemClock.uptimeMillis()
         if (p.isShowing) {
+            // Only a window that has just been created, or one woken from its parking spot, sits far from this key and
+            // may not have drawn yet: there the bubble waits one frame for the move to land (otherwise it is drawn at the
+            // old spot and runs to the key). Everywhere else the window is already near the keys: show at once, as before.
+            val lateMove = !wasSolid && (wasParked || now - bornAt < 400L)
             if (wasSolid) {
                 p.update(x - ox, y - oy, ww, wh)
                 face.alpha = 1f; face.scaleX = 1f; face.scaleY = 1f; lens?.morph = 1f
-            } else {
-                // A window move reaches the screen a frame or two after update() returns. Starting the pop-in now drew the
-                // bubble at the OLD spot (the warm-up window's corner, or the previous key) and it then ran to this key.
-                // So the bubble stays invisible until the move has landed, and only then grows out of the key.
+            } else if (lateMove) {
                 face.alpha = 0f
                 p.update(x - ox, y - oy, ww, wh)
-                afterFrames(2) {
+                afterFrames(1) {
                     if (seq == moveSeq && owner === key) {
                         lens?.aim(key, glyph)
                         morphFromKey(face, lens, bw, bh, key.width, key.height, t, motionOn)
                     }
                 }
+            } else {
+                p.update(x - ox, y - oy, ww, wh)
+                morphFromKey(face, lens, bw, bh, key.width, key.height, t, motionOn)
             }
         } else {
             p.width = ww; p.height = wh
-            face.alpha = 0f
+            bornAt = now
             p.showAtLocation(key, Gravity.NO_GRAVITY, x - ox, y - oy)
             morphFromKey(face, lens, bw, bh, key.width, key.height, t, motionOn)
         }
     }
+
+    /** When the popup window was last added (or warmed up): a window this young may not have settled at its spot yet. */
+    private var bornAt = 0L
 
     /** Bumped by every show() and dismiss(): a reveal that was waiting for a window move drops itself when it is stale. */
     private var moveSeq = 0
