@@ -222,7 +222,12 @@ object KbMode {
     const val PREF = "mode"
     fun pref(c: Context) = Prefs.str(c, PREF, "system")
     fun systemNight(c: Context) = c.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
-    fun night(c: Context): Boolean = when (pref(c)) { "dark" -> true; "light" -> false; else -> systemNight(c) }
+    /** Set by the service while typing into an app known to be dark whatever the system says (terminals); null = follow the system. */
+    @Volatile var appNight: Boolean? = null
+    private val TERMINALS = setOf("com.termux", "org.connectbot", "jackpal.androidterm", "com.server.auditor.ssh.client", "com.sonelli.juicessh")
+    /** In "System" mode a terminal gets the dark keyboard even when the phone is in light mode. */
+    fun forApp(pkg: String?): Boolean? = if (pkg != null && pkg in TERMINALS) true else null
+    fun night(c: Context): Boolean = when (pref(c)) { "dark" -> true; "light" -> false; else -> appNight ?: systemNight(c) }
 
     /** The keyboard's Material theme (Material You or the fixed palette) with the chosen mode applied. */
     fun themed(base: Context, dynamic: Boolean): ContextThemeWrapper {

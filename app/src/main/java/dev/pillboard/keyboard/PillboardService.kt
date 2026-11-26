@@ -91,6 +91,7 @@ class PillboardService : InputMethodService() {
     private var builtSeed = 0
     private var builtFx = true
     private var builtMode = "system"
+    private var builtNight = false
     private var builtTri = true
     private var builtStyle = AccentStyle.TONAL
     private var builtTint = 62
@@ -160,6 +161,7 @@ class PillboardService : InputMethodService() {
         builtSeed = Prefs.seedColor(this)
         builtFx = BackEffect.pressGlow(this)
         builtMode = KbMode.pref(this)
+        builtNight = KbMode.night(this)
         builtTri = Prefs.bool(this, "tritone", true)
         builtStyle = Prefs.accentStyle(this)
         builtTint = Prefs.int(this, "blur_tint", 62)
@@ -256,7 +258,8 @@ class PillboardService : InputMethodService() {
 
     override fun onStartInputView(info: EditorInfo?, restarting: Boolean) {
         super.onStartInputView(info, restarting)
-        val rebuild = Prefs.dynamic(this) != builtDynamic || Prefs.seedColor(this) != builtSeed || BackEffect.pressGlow(this) != builtFx || KbTheme.current(this) != builtTheme ||
+        KbMode.appNight = KbMode.forApp(info?.packageName)
+        val rebuild = KbMode.night(this) != builtNight || Prefs.dynamic(this) != builtDynamic || Prefs.seedColor(this) != builtSeed || BackEffect.pressGlow(this) != builtFx || KbTheme.current(this) != builtTheme ||
             KbMode.pref(this) != builtMode || Prefs.bool(this, "tritone", true) != builtTri || Prefs.accentStyle(this) != builtStyle || Prefs.int(this, "blur_tint", 62) != builtTint
         // The app restarted input on the SAME field (many apps do when the field is cleared or the send button changes):
         // nothing about the field changed, so keep the keyboard as it is. Rebuilding every key and re-applying the window
@@ -298,6 +301,7 @@ class PillboardService : InputMethodService() {
         stopTranslateState()
         Suggestions.save()
         super.onFinishInputView(finishingInput)
+        KbMode.appNight = null   // the Settings app shares this process: it must not inherit a terminal's dark
     }
 
     /**
