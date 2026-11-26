@@ -64,18 +64,50 @@ internal object Haptics {
     fun play(c: Context, kind: Int = HapticFeedbackConstants.KEYBOARD_TAP, v: View? = null) {
         if (!Prefs.bool(c, "haptic", true)) return
         if (kind == HAPTIC_RELEASE && !Prefs.bool(c, "haptic_release", true)) return
-        val strength = Prefs.int(c, "haptic_strength", 70).coerceIn(5, 100)
+        val strength = Prefs.int(c, "haptic_strength", 85).coerceIn(5, 100)
         val style = HapticStyle.of(Prefs.str(c, "haptic_style", "crisp"))
         val vb = vibrator(c)
         if (vb != null && vb.hasVibrator()) {
+            // Default engine: the system's own predefined effects (the path that worked before the revamp).
+            // Strength only applies to the "advanced" engine, which composes primitives / waveforms itself.
+            if (Prefs.str(c, "haptic_engine", "system") != "advanced" && Build.VERSION.SDK_INT >= 29) {
+                if (kind == HAPTIC_RELEASE && style != HapticStyle.MECH) return
+                android.util.Log.d("Haptics", "system engine kind=$kind style=${style.id}")
+                predefined(vb, kind, style)
+                return
+            }
             val key = strength * 8 + style.ordinal
             if (key != cacheKey) { cacheKey = key; cache.fill(null) }
             val i = slot(kind)
             val effect = cache[i] ?: build(vb, style, strength, i).also { cache[i] = it }
-            vb.vibrate(effect)
+            try { vb.vibrate(effect) } catch (t: Exception) { android.util.Log.w("Haptics", "advanced failed", t); fallback(vb, kind) }
             return
         }
         if (kind != HAPTIC_RELEASE) v?.performHapticFeedback(kind, HapticFeedbackConstants.FLAG_IGNORE_GLOBAL_SETTING)
+    }
+
+    private fun predefined(vb: Vibrator, kind: Int, style: HapticStyle) {
+        val e = when (kind) {
+            HapticFeedbackConstants.LONG_PRESS -> VibrationEffect.EFFECT_HEAVY_CLICK
+            HapticFeedbackConstants.CLOCK_TICK, HAPTIC_RELEASE -> VibrationEffect.EFFECT_TICK
+            else -> when (style) {
+                HapticStyle.SOFT -> VibrationEffect.EFFECT_TICK
+                HapticStyle.HEAVY -> VibrationEffect.EFFECT_HEAVY_CLICK
+                else -> VibrationEffect.EFFECT_CLICK
+            }
+        }
+        try { vb.vibrate(VibrationEffect.createPredefined(e)) } catch (t: Exception) { android.util.Log.w("Haptics", "predefined failed", t) }
+    }
+
+    /** Whatever the motor was asked and refused: the system's own predefined click, which every vibrator that works can play. */
+    private fun fallback(vb: Vibrator, kind: Int) {
+        if (Build.VERSION.SDK_INT < 29) return
+        val e = when (kind) {
+            HapticFeedbackConstants.LONG_PRESS -> VibrationEffect.EFFECT_HEAVY_CLICK
+            HapticFeedbackConstants.CLOCK_TICK, HAPTIC_RELEASE -> VibrationEffect.EFFECT_TICK
+            else -> VibrationEffect.EFFECT_CLICK
+        }
+        try { vb.vibrate(VibrationEffect.createPredefined(e)) } catch (_: Exception) {}
     }
 
     private fun build(vb: Vibrator, s: HapticStyle, strength: Int, slot: Int): VibrationEffect {
@@ -83,7 +115,7 @@ internal object Haptics {
             if (vb.areAllPrimitivesSupported(
                     Composition.PRIMITIVE_CLICK, Composition.PRIMITIVE_TICK,
                     Composition.PRIMITIVE_LOW_TICK, Composition.PRIMITIVE_THUD)) {
-                return composed(s, strength / 100f, slot)
+                return composed(s, 0.35f + 0.65f * (strength / 100f), slot)   // floor: a light primitive on a weak motor is not felt at all
             }
         }
         return wave(vb, s, strength, slot)
@@ -95,10 +127,10 @@ internal object Haptics {
         fun add(prim: Int, scale: Float, delayMs: Int = 0) { b.addPrimitive(prim, scale.coerceIn(0.02f, 1f), delayMs) }
         when (slot) {
             TAP -> when (s) {
-                HapticStyle.CRISP -> add(Composition.PRIMITIVE_TICK, k)
-                HapticStyle.SOFT -> add(Composition.PRIMITIVE_LOW_TICK, k)
-                HapticStyle.HEAVY -> add(Composition.PRIMITIVE_CLICK, k)
-                HapticStyle.MECH -> add(Composition.PRIMITIVE_CLICK, k * 0.8f)
+                HapticStyle.CRISP -> add(Composition.PRIMITIVE_CLICK, k * 0.85f)
+                HapticStyle.SOFT -> add(Composition.PRIMITIVE_TICK, k)
+                HapticStyle.HEAVY -> { add(Composition.PRIMITIVE_CLICK, k); add(Composition.PRIMITIVE_THUD, k * 0.6f) }
+                HapticStyle.MECH -> add(Composition.PRIMITIVE_CLICK, k)
             }
             LONG -> when (s) {
                 HapticStyle.CRISP -> add(Composition.PRIMITIVE_CLICK, k)
@@ -107,16 +139,16 @@ internal object Haptics {
                 HapticStyle.MECH -> { add(Composition.PRIMITIVE_CLICK, k); add(Composition.PRIMITIVE_THUD, k * 0.8f, 30) }
             }
             TICK -> when (s) {
-                HapticStyle.CRISP -> add(Composition.PRIMITIVE_TICK, k * 0.8f)
-                HapticStyle.SOFT -> add(Composition.PRIMITIVE_LOW_TICK, k * 0.7f)
+                HapticStyle.CRISP -> add(Composition.PRIMITIVE_TICK, k)
+                HapticStyle.SOFT -> add(Composition.PRIMITIVE_LOW_TICK, k)
                 HapticStyle.HEAVY -> add(Composition.PRIMITIVE_TICK, k)
-                HapticStyle.MECH -> add(Composition.PRIMITIVE_LOW_TICK, k)
+                HapticStyle.MECH -> add(Composition.PRIMITIVE_TICK, k * 0.9f)
             }
             else -> when (s) {
-                HapticStyle.CRISP -> add(Composition.PRIMITIVE_LOW_TICK, k * 0.5f)
-                HapticStyle.SOFT -> add(Composition.PRIMITIVE_LOW_TICK, k * 0.35f)
-                HapticStyle.HEAVY -> add(Composition.PRIMITIVE_TICK, k * 0.6f)
-                HapticStyle.MECH -> add(Composition.PRIMITIVE_TICK, k * 0.7f)
+                HapticStyle.CRISP -> add(Composition.PRIMITIVE_TICK, k * 0.6f)
+                HapticStyle.SOFT -> add(Composition.PRIMITIVE_LOW_TICK, k * 0.6f)
+                HapticStyle.HEAVY -> add(Composition.PRIMITIVE_TICK, k * 0.7f)
+                HapticStyle.MECH -> add(Composition.PRIMITIVE_TICK, k * 0.8f)
             }
         }
         return b.compose()
@@ -161,7 +193,7 @@ internal object Haptics {
         ps.forEachIndexed { i, p ->
             timings[i * 2] = p.gap
             // no amplitude control: strength can only change how long the motor runs
-            timings[i * 2 + 1] = if (amplitude) p.ms else (p.ms * (0.4f + 0.6f * k)).toLong().coerceAtLeast(2L)
+            timings[i * 2 + 1] = (if (amplitude) p.ms else (p.ms * (0.4f + 0.6f * k)).toLong()).coerceAtLeast(18L)   // an eccentric motor needs ~18 ms just to spin up
             amps[i * 2 + 1] = if (amplitude) (255 * k * p.amp).toInt().coerceIn(1, 255) else 255
         }
         return if (amplitude) VibrationEffect.createWaveform(timings, amps, -1)

@@ -181,10 +181,16 @@ class SettingsActivity : Activity() {
             },
             Item(Page.FEEDBACK, "Haptic feedback", "vibration vibrate") { ui.toggle("Haptic feedback", "Vibrate on key press", "haptic", true) { renderBody(animate = true) } },
             Item(Page.FEEDBACK, "Haptic strength", "vibration vibrate strength intensity power haptic light strong", visible = { Prefs.bool(this, "haptic", true) }) {
-                ui.slider("Haptic strength", 5, 100, "haptic_strength", 70, listOf("Light" to 35, "Standard" to 70, "Strong" to 100), unit = "%") { Haptics.play(this) }
+                ui.slider("Haptic strength", 5, 100, "haptic_strength", 85, listOf("Light" to 40, "Standard" to 85, "Strong" to 100), unit = "%") { Haptics.play(this) }
             },
             Item(Page.FEEDBACK, "Haptic style", "vibration vibrate style feel crisp soft heavy mechanical click haptic", visible = { Prefs.bool(this, "haptic", true) }) {
                 ui.cycle("Haptic style", "haptic_style", "crisp", HapticStyle.values().map { it.id to it.label }) { Haptics.play(this) }
+            },
+            Item(Page.FEEDBACK, "Haptic engine", "vibration haptic engine system advanced primitive no vibration fix", visible = { Prefs.bool(this, "haptic", true) }) {
+                ui.cycle("Haptic engine", "haptic_engine", "system", listOf("system" to "Standard", "advanced" to "Advanced (strength)")) { Haptics.play(this) }
+            },
+            Item(Page.FEEDBACK, "Haptic test", "vibration haptic test diagnose debug no vibration not working") {
+                ui.link("Haptic test", "Try each vibration method and see which one your phone feels", chevron = false) { HapticLab.show(this) }
             },
             Item(Page.FEEDBACK, "Release tick", "vibration haptic release lift finger up tick", visible = { Prefs.bool(this, "haptic", true) }) {
                 ui.toggle("Release tick", "A faint tick when you lift your finger off a key", "haptic_release", true) { if (it) Haptics.play(this, HAPTIC_RELEASE) }

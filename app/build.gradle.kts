@@ -10,7 +10,7 @@ android {
         minSdk = 26
         targetSdk = 35
         versionCode = 1
-        versionName = "0.1.0"
+        versionName = "0.1.0-" + (System.getenv("GITHUB_SHA")?.take(7) ?: "local")
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
