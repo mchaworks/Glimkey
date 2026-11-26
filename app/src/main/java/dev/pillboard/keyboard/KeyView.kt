@@ -81,7 +81,12 @@ class KeyPreview(ctx: Context, private val t: KbTokens) {
     }
     /** API 33+: a liquid-glass bubble (Liquid-Glass-Android) that bends the keys around it; otherwise the plain bubble above. */
     private val lens: LensView? = if (t.isGlass && LensView.available() && Prefs.bool(ctx, "lens", true)) LensView(ctx, t) else null
-    private val face: View = lens ?: bubble
+    /** Holds the lens AND the plain bubble; [show] picks one per press (the lens has nothing to refract where it sticks out above the keyboard window). */
+    private val face: View = FrameLayout(ctx).apply {
+        clipChildren = false; clipToPadding = false
+        addView(bubble, FrameLayout.LayoutParams(-1, -1))
+        lens?.let { addView(it, FrameLayout.LayoutParams(-1, -1)); bubble.visibility = View.GONE }
+    }
     private val holder = shadowHolder(ctx, face)
 
     /**
@@ -184,12 +189,17 @@ class KeyPreview(ctx: Context, private val t: KbTokens) {
         val bx = (loc[0] + key.width / 2 - bw / 2).coerceIn(2.dp, (screenW - bw - 2.dp).coerceAtLeast(2.dp))
         val x = (bx - pad).coerceAtLeast(0)
         val y = (loc[1] + 2.dp - bh - pad).coerceAtLeast(0)
+        // the glass lens samples the keyboard window; a bubble that reaches above it (top row) would show a dark, empty backdrop there
+        val rootY = IntArray(2).also { key.rootView.getLocationOnScreen(it) }[1]
+        val useLens = lens != null && loc[1] + 2.dp - bh >= rootY
+        lens?.visibility = if (useLens) View.VISIBLE else View.GONE
+        bubble.visibility = if (useLens) View.GONE else View.VISIBLE
         val oldX = stageX; val oldY = stageY; val oldW = stageW; val oldH = stageH
         stageGeom(key.rootView)
         // the window only ever moves when the keyboard itself moved or resized (rare); a key press never moves it
         val geomChanged = Math.abs(oldX - stageX) > 2 || Math.abs(oldY - stageY) > 2 || Math.abs(oldW - stageW) > 2 || Math.abs(oldH - stageH) > 2
         bubble.text = glyph
-        lens?.aim(key, glyph)
+        if (useLens) lens?.aim(key, glyph)
         val sameKey = owner === key
         owner = key
         val p = popup ?: PopupWindow(stage, stageW, stageH, false).also { it.isTouchable = false; it.animationStyle = R.style.Pillboard_NoWindowAnim; popup = it }
@@ -207,7 +217,7 @@ class KeyPreview(ctx: Context, private val t: KbTokens) {
                 afterLanded(stageX, stageY) {
                     if (seq == moveSeq) {
                         pendingReveal = false
-                        lens?.aim(key, glyph)
+                        if (useLens) lens?.aim(key, glyph)
                         morphFromKey(face, lens, bw, bh, key.width, key.height, t, motionOn)
                         if (releasedEarly) {
                             releasedEarly = false
@@ -441,18 +451,19 @@ class KeyView(
             KeyStyle.LETTER -> { fill = t.key; ink = t.keyText }
             KeyStyle.SPECIAL -> { fill = t.special; ink = t.specialText }
             KeyStyle.ACCENT -> { fill = t.accent; ink = t.onAccent }
-            KeyStyle.ACTIVE -> { fill = t.keyText; ink = t.key }
+            KeyStyle.ACTIVE -> { fill = t.activeFill; ink = t.activeInk }
         }
         // iOS: special keys flip to the letter-key tone while pressed; the inverted Shift dims a little
         pressedFill = when (style) {
             KeyStyle.ACCENT -> t.accentPressed
             KeyStyle.SPECIAL -> t.pressedSpecial
-            KeyStyle.ACTIVE -> ColorUtils.blendARGB(t.keyText, t.key, 0.22f)
+            KeyStyle.ACTIVE -> ColorUtils.blendARGB(t.activeFill, t.activeInk, 0.22f)
             KeyStyle.LETTER -> t.pressed
         }
         pressedInk = when (style) {
             KeyStyle.ACCENT -> t.onAccent
             KeyStyle.ACTIVE -> ink
+            KeyStyle.SPECIAL -> t.pressedSpecialText
             else -> t.pressedText
         }
         rest = radiusFor(style)
@@ -828,6 +839,7 @@ class KeyView(
             }
             MotionEvent.ACTION_UP -> {
                 removeCallbacks(repeater); removeCallbacks(longPress)
+                if (!sliding && popup == null && !hintHeld) keyHaptic(HAPTIC_RELEASE)     // the faint tick of the finger lifting
                 if (sliding) { sliding = false; onSlideState?.invoke(false) }
                 animateTo(false)
                 leanGlass(false)
