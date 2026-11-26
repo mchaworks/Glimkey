@@ -417,7 +417,7 @@ class KeyView(
     private val repeater = object : Runnable {
         override fun run() {
             onKey()
-            repeatCount++; keyHaptic(HapticFeedbackConstants.CLOCK_TICK)   // one tick per deleted character
+            if (++repeatCount % 2 == 0) keyHaptic(HapticFeedbackConstants.CLOCK_TICK)   // 90 ms apart: closer than this the ticks blur into a buzz
             if (repeatCount % 2 == 0) keySound(soundLabel)
             postDelayed(this, 45)
         }
