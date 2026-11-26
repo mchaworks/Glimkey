@@ -90,6 +90,9 @@ class PillboardService : InputMethodService() {
     private var builtDynamic = true
     private var builtSeed = 0
     private var builtFx = true
+    private var builtMode = "system"
+    private var builtTri = true
+    private var builtStyle = AccentStyle.TONAL
     private var pageKey: KeyView? = null
     // emoji panel: grid mode (tabs + grid) or search mode (letter keys type into [query], results in the top bar)
     private var emojiMode = false
@@ -155,11 +158,14 @@ class PillboardService : InputMethodService() {
         builtDynamic = Prefs.dynamic(this)
         builtSeed = Prefs.seedColor(this)
         builtFx = BackEffect.pressGlow(this)
+        builtMode = KbMode.pref(this)
+        builtTri = Prefs.bool(this, "tritone", true)
+        builtStyle = Prefs.accentStyle(this)
         shell = null
         lastBlurRadius = -1; maskDrawable = null; maskGlass = null; maskHost = null     // a new input view: everything is applied afresh
         blurAnim?.cancel(); blurK = 1f; fillK = 0f
         builtTheme = KbTheme.current(this)
-        val tw = ContextThemeWrapper(this, if (builtDynamic) R.style.Theme_Pillboard else R.style.Theme_Pillboard_Static)
+        val tw = KbMode.themed(this, builtDynamic)      // the Material theme, in the light / dark mode chosen in Settings
         if (builtTheme.fontOverlay != 0) tw.theme.applyStyle(builtTheme.fontOverlay, true)
         themed = tw
         tokens = KbTokens(themed, builtTheme)
@@ -248,7 +254,8 @@ class PillboardService : InputMethodService() {
 
     override fun onStartInputView(info: EditorInfo?, restarting: Boolean) {
         super.onStartInputView(info, restarting)
-        val rebuild = Prefs.dynamic(this) != builtDynamic || Prefs.seedColor(this) != builtSeed || BackEffect.pressGlow(this) != builtFx || KbTheme.current(this) != builtTheme
+        val rebuild = Prefs.dynamic(this) != builtDynamic || Prefs.seedColor(this) != builtSeed || BackEffect.pressGlow(this) != builtFx || KbTheme.current(this) != builtTheme ||
+            KbMode.pref(this) != builtMode || Prefs.bool(this, "tritone", true) != builtTri || Prefs.accentStyle(this) != builtStyle
         // The app restarted input on the SAME field (many apps do when the field is cleared or the send button changes):
         // nothing about the field changed, so keep the keyboard as it is. Rebuilding every key and re-applying the window
         // blur here made the keyboard flash and resize the app (the chat jumping up and down) each time.

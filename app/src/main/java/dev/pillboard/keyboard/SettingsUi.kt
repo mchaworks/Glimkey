@@ -38,15 +38,35 @@ class SettingsUi(private val a: Activity) {
     val tileInset get() = rowPad + tileSize + 14.dp
     private fun color(attr: Int, fb: Int) = MaterialColors.getColor(a, attr, fb)
 
-    val pageBg get() = if (night) ColorUtils.blendARGB(color(MR.attr.colorSurface, 0xFF141218.toInt()), Color.BLACK, 0.45f)
-        else color(MR.attr.colorSurfaceContainer, 0xFFF2F2F7.toInt())
-    val surface get() = if (night) color(MR.attr.colorSurfaceContainerHigh, 0xFF2B2B2B.toInt())
-        else color(MR.attr.colorSurfaceContainerLowest, Color.WHITE)
+    /**
+     * Tonal triad that colours the whole settings app: the wallpaper's Material You palette, or the accent chosen in
+     * Appearance, so the app, the keyboard and its preview always wear the same three tones.
+     */
+    private val tri: Triad by lazy {
+        if (Prefs.dynamic(a)) Triad.fromTheme(a) else Triad.fromSeed(Prefs.seedColor(a), night, Prefs.accentStyle(a))
+    }
+    val secondaryContainer get() = tri.sc
+    val onSecondaryContainer get() = tri.onSc
+    val tertiary get() = tri.t
+
+    // with a fixed accent the page and cards are tinted by it (Pixel style) instead of the baseline purple
+    val pageBg get() = when {
+        Prefs.dynamic(a) -> if (night) ColorUtils.blendARGB(color(MR.attr.colorSurface, 0xFF141218.toInt()), Color.BLACK, 0.45f)
+            else color(MR.attr.colorSurfaceContainer, 0xFFF2F2F7.toInt())
+        night -> ColorUtils.blendARGB(0xFF0F0F12.toInt(), tri.pc, 0.16f)
+        else -> ColorUtils.blendARGB(0xFFF5F5F8.toInt(), tri.pc, 0.32f)
+    }
+    val surface get() = when {
+        Prefs.dynamic(a) -> if (night) color(MR.attr.colorSurfaceContainerHigh, 0xFF2B2B2B.toInt())
+            else color(MR.attr.colorSurfaceContainerLowest, Color.WHITE)
+        night -> ColorUtils.blendARGB(0xFF1C1C21.toInt(), tri.pc, 0.22f)
+        else -> ColorUtils.blendARGB(Color.WHITE, tri.pc, 0.06f)
+    }
     val inputBg get() = pageBg
     val onSurface get() = color(MR.attr.colorOnSurface, Color.WHITE)
     val onSurfaceVar get() = color(MR.attr.colorOnSurfaceVariant, Color.LTGRAY)
-    val primary get() = color(MR.attr.colorPrimary, Color.WHITE)
-    val onPrimary get() = color(MR.attr.colorOnPrimary, Color.BLACK)
+    val primary get() = tri.p
+    val onPrimary get() = tri.onP
     val hairline get() = (onSurface and 0x00FFFFFF) or (0x1A shl 24)
     val error get() = color(MR.attr.colorError, Color.RED)
     private val switchOff get() = ColorUtils.blendARGB(surface, onSurface, if (night) 0.24f else 0.14f)
@@ -130,14 +150,33 @@ class SettingsUi(private val a: Activity) {
         minimumHeight = 56.dp; setPadding(rowPad, 11.dp, rowPad, 11.dp)
     }
 
-    /** iOS 26 settings icon: one neutral grey rounded square with a white glyph (the per-page colour [bg] is no longer used). */
-    private val tileGrey get() = if (night) 0xFF6B6B70.toInt() else 0xFF8E8E93.toInt()
+    /** Settings icon: a rounded square in the accent's secondary container with its "on" colour glyph, so the tiles belong to the hero tile. */
     @Suppress("UNUSED_PARAMETER")
     private fun iconTile(icon: Int, bg: Int): View = FrameLayout(a).apply {
-        background = tileBg(tileGrey, 9.dp)
-        addView(ImageView(a).apply { setImageResource(icon); imageTintList = ColorStateList.valueOf(Color.WHITE) },
+        background = GradientDrawable().apply { setColor(secondaryContainer); cornerRadius = 9.dp.toFloat() }
+        addView(ImageView(a).apply { setImageResource(icon); imageTintList = ColorStateList.valueOf(onSecondaryContainer) },
             FrameLayout.LayoutParams(19.dp, 19.dp, Gravity.CENTER))
     }
+
+    /** Slider parts in the accent instead of the theme's baseline purple. */
+    private fun tintSlider(s: Slider) {
+        s.setThumbTintList(ColorStateList.valueOf(primary))
+        s.setTrackActiveTintList(ColorStateList.valueOf(primary))
+        s.setTrackInactiveTintList(ColorStateList.valueOf(ColorUtils.blendARGB(surface, primary, if (night) 0.30f else 0.22f)))
+        s.setHaloTintList(ColorStateList.valueOf(ColorUtils.setAlphaComponent(primary, 0x30)))
+    }
+
+    /** Title over a gliding segmented control: for a few options where seeing all of them beats tapping through. */
+    fun segmentRow(title: String, key: String, def: String, options: List<Pair<String, String>>, onChange: () -> Unit): View =
+        LinearLayout(a).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(rowPad, 14.dp, rowPad, 14.dp)
+            addView(TextView(a).apply { text = title; textSize = 17f; setTextColor(onSurface) })
+            addView(Segmented(a, options.map { it.second }, segTrack, segPill, onSurface, onSurfaceVar, medium).apply {
+                select(options.indexOfFirst { it.first == Prefs.str(a, key, def) }, false)
+                onSelect = { i -> Prefs.setStr(a, key, options[i].first); onChange() }
+            }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = 10.dp })
+        }
 
     /** iOS tile body: the colour with a soft light-to-base vertical gradient. */
     private fun tileBg(c: Int, r: Int) = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
@@ -220,6 +259,7 @@ class SettingsUi(private val a: Activity) {
                 isTickVisible = false; labelBehavior = LabelFormatter.LABEL_GONE
                 trackHeight = 10.dp; thumbRadius = 13.dp; haloRadius = 22.dp
                 value = Prefs.int(a, key, def).toFloat().coerceIn(valueFrom, valueTo)
+                tintSlider(this)
             }
             val seg = Segmented(a, presets.map { it.first }, segTrack, segPill, onSurface, onSurfaceVar, medium).apply {
                 onSelect = { i -> s.value = presets[i].second.toFloat() }
@@ -245,31 +285,94 @@ class SettingsUi(private val a: Activity) {
             addView(seg, LinearLayout.LayoutParams(-1, -2))
         }
 
-    fun accent(onChange: () -> Unit): View = LinearLayout(a).apply {
-        orientation = LinearLayout.VERTICAL
-        setPadding(rowPad, 14.dp, rowPad, 16.dp)
-        addView(TextView(a).apply { text = "Accent color"; textSize = 17f; setTextColor(onSurface) })
-        val swatches = LinearLayout(a).apply { setPadding(0, 14.dp, 0, 0) }
-        val custom = Prefs.PRESETS.size
-        val hue = Slider(a).apply {
-            valueFrom = 0f; valueTo = 359f; stepSize = 1f; isTickVisible = false
-            labelBehavior = LabelFormatter.LABEL_GONE; trackHeight = 10.dp; thumbRadius = 13.dp; haloRadius = 22.dp
-            value = Prefs.hue(a).toFloat()
+    /**
+     * Accent picker: a grid of three-tone chips (primary / secondary / tertiary, like Pixel's picker), the wallpaper's own
+     * Material You palette first, then the presets and a custom hue. A palette style decides how far the other two tones
+     * drift from the accent. The settings app wears the choice too, so a change recreates the page ([onChange] only
+     * refreshes the preview while a hue is being dragged).
+     */
+    fun accent(onChange: () -> Unit): View {
+        val root = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL; setPadding(rowPad, 14.dp, rowPad, 16.dp) }
+        root.addView(TextView(a).apply { text = "Accent color"; textSize = 17f; setTextColor(onSurface) })
+        val caption = TextView(a).apply { textSize = 13f; setTextColor(onSurfaceVar) }
+        root.addView(caption, LinearLayout.LayoutParams(-2, -2).apply { topMargin = 1.dp })
+        val grid = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL; setPadding(0, 12.dp, 0, 0) }
+        root.addView(grid)
+
+        val dark = KbMode.night(a)
+        val isDyn = Prefs.dynamic(a)
+        val threeTone = Prefs.bool(a, "tritone", true)
+        val style = Prefs.accentStyle(a)
+
+        class E(val label: String, val triad: Triad, val selected: Boolean, val pick: () -> Unit)
+        fun choose(i: Int) { Prefs.setPreset(a, i); Prefs.setBool(a, "dynamic", false); a.recreate() }
+        fun entries(): List<E> {
+            val list = ArrayList<E>()
+            if (android.os.Build.VERSION.SDK_INT >= 31) {
+                val sys = Triad.fromTheme(android.view.ContextThemeWrapper(a, R.style.Theme_Pillboard))
+                list.add(E("Wallpaper", sys, isDyn) { Prefs.setBool(a, "dynamic", true); a.recreate() })
+            }
+            Prefs.PRESETS.forEachIndexed { i, p ->
+                list.add(E(p.first, Triad.fromSeed(p.second, dark, style), !isDyn && Prefs.preset(a) == i) { choose(i) })
+            }
+            list.add(E("Custom", Triad.fromSeed(Prefs.customColor(a), dark, style), !isDyn && Prefs.preset(a) == Prefs.CUSTOM) { choose(Prefs.CUSTOM) })
+            return list
+        }
+        fun chip(e: E): View = FrameLayout(a).apply {
+            contentDescription = e.label
+            addView(View(a).apply {
+                background = if (threeTone) TriToneDrawable(e.triad.p, e.triad.s, e.triad.t, if (e.selected) onSurface else 0, 3.dp.toFloat())
+                else GradientDrawable().apply {
+                    shape = GradientDrawable.OVAL; setColor(e.triad.p)
+                    if (e.selected) setStroke(3.dp, onSurface)
+                }
+            }, FrameLayout.LayoutParams(44.dp, 44.dp, Gravity.CENTER))
+            setOnClickListener { e.pick() }
         }
         fun refresh() {
-            for (i in 0..custom) swatches.getChildAt(i).background = GradientDrawable().apply {
-                shape = GradientDrawable.OVAL
-                setColor(if (i < custom) Prefs.PRESETS[i].second else Prefs.customColor(a))
-                if (i == Prefs.preset(a)) setStroke(3.dp, onSurface)
+            val list = entries()
+            grid.removeAllViews()
+            list.chunked(5).forEach { rowItems ->
+                val line = LinearLayout(a)
+                rowItems.forEach { line.addView(chip(it), LinearLayout.LayoutParams(0, 52.dp, 1f)) }
+                repeat(5 - rowItems.size) { line.addView(View(a), LinearLayout.LayoutParams(0, 1, 1f)) }
+                grid.addView(line, LinearLayout.LayoutParams(-1, -2))
             }
-            hue.visibility = if (Prefs.preset(a) == custom) View.VISIBLE else View.GONE
+            val sel = list.firstOrNull { it.selected }
+            caption.text = when {
+                sel == null -> ""
+                sel.label == "Wallpaper" -> "Wallpaper · Material You"
+                else -> "${sel.label} · ${style.label}"
+            }
         }
-        for (i in 0..custom) swatches.addView(View(a).apply {
-            contentDescription = if (i < custom) Prefs.PRESETS[i].first else "Custom"
-            setOnClickListener { Prefs.setInt(a, "preset", i); refresh(); onChange() }
-        }, LinearLayout.LayoutParams(36.dp, 36.dp).apply { marginEnd = 10.dp })
-        hue.addOnChangeListener { _, v, _ -> Prefs.setInt(a, "hue", v.toInt()); refresh(); onChange() }
-        refresh(); addView(swatches); addView(hue, lp())
+        refresh()
+
+        if (!isDyn) {
+            root.addView(TextView(a).apply { text = "Palette style"; textSize = 13f; setTextColor(onSurfaceVar) },
+                LinearLayout.LayoutParams(-2, -2).apply { topMargin = 14.dp; bottomMargin = 8.dp })
+            val styles = AccentStyle.values().toList()
+            root.addView(Segmented(a, styles.map { it.label }, segTrack, segPill, onSurface, onSurfaceVar, medium).apply {
+                select(styles.indexOf(style), false)
+                onSelect = { i -> Prefs.setStr(a, "accent_style", styles[i].id); a.recreate() }
+            }, LinearLayout.LayoutParams(-1, -2))
+            if (Prefs.preset(a) == Prefs.CUSTOM) {
+                root.addView(TextView(a).apply { text = "Hue"; textSize = 13f; setTextColor(onSurfaceVar) },
+                    LinearLayout.LayoutParams(-2, -2).apply { topMargin = 14.dp })
+                val hue = Slider(a).apply {
+                    valueFrom = 0f; valueTo = 359f; stepSize = 1f; isTickVisible = false
+                    labelBehavior = LabelFormatter.LABEL_GONE; trackHeight = 10.dp; thumbRadius = 13.dp; haloRadius = 22.dp
+                    value = Prefs.hue(a).toFloat()
+                    tintSlider(this)
+                    addOnChangeListener { _, v, _ -> Prefs.setInt(a, "hue", v.toInt()); refresh(); onChange() }
+                    addOnSliderTouchListener(object : Slider.OnSliderTouchListener {
+                        override fun onStartTrackingTouch(slider: Slider) {}
+                        override fun onStopTrackingTouch(slider: Slider) { a.recreate() }
+                    })
+                }
+                root.addView(hue, LinearLayout.LayoutParams(-1, -2))
+            }
+        }
+        return root
     }
 
     /** Theme picker: a 2x2 grid of live miniatures (real shell + keycap skin of each theme); tapping one applies it. */
@@ -353,4 +456,29 @@ class SettingsUi(private val a: Activity) {
         val wrap = LinearLayout(a).apply { setPadding(14.dp, 14.dp, 14.dp, 14.dp); addView(input, LinearLayout.LayoutParams(-1, -2)) }
         return wrap to input
     }
+}
+
+/** A round chip split in three like Pixel's accent picker: [a] the left half, [b] top right, [c] bottom right; [ring] outlines the selected one. */
+internal class TriToneDrawable(private val a: Int, private val b: Int, private val c: Int, private val ring: Int, private val ringW: Float) :
+    android.graphics.drawable.Drawable() {
+    private val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+    private val box = android.graphics.RectF()
+
+    override fun draw(canvas: android.graphics.Canvas) {
+        box.set(bounds)
+        if (ring != 0) box.inset(ringW + 2f * ringW / 3f, ringW + 2f * ringW / 3f)
+        paint.style = android.graphics.Paint.Style.FILL
+        paint.color = a; canvas.drawArc(box, 90f, 180f, true, paint)
+        paint.color = b; canvas.drawArc(box, 270f, 90f, true, paint)
+        paint.color = c; canvas.drawArc(box, 0f, 90f, true, paint)
+        if (ring != 0) {
+            box.set(bounds); box.inset(ringW / 2f, ringW / 2f)
+            paint.style = android.graphics.Paint.Style.STROKE; paint.strokeWidth = ringW; paint.color = ring
+            canvas.drawOval(box, paint)
+        }
+    }
+    override fun setAlpha(alpha: Int) { paint.alpha = alpha }
+    override fun setColorFilter(cf: android.graphics.ColorFilter?) { paint.colorFilter = cf }
+    @Suppress("OVERRIDE_DEPRECATION")
+    override fun getOpacity() = android.graphics.PixelFormat.TRANSLUCENT
 }

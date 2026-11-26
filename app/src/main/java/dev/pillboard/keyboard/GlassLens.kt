@@ -34,7 +34,7 @@ class LensView(ctx: Context, private val t: KbTokens) : LiquidGlassView(ctx) {
         refractionHeight = 9.dp.toFloat()
         dispersionStrength = 0.12f
         blurAmount = 0.10f
-        glassTint = ColorUtils.setAlphaComponent(t.key, 0x59)
+        glassTint = ColorUtils.setAlphaComponent(t.key, 0xD2)   // mostly opaque: above the keyboard window there is nothing to sample, so a see-through bubble went dark
         enablePressEffect = false                 // the popup never takes touches; the preview animates the view itself
         addView(glyph, FrameLayout.LayoutParams(-1, -1, Gravity.CENTER))
     }

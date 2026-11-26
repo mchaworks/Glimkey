@@ -5,6 +5,8 @@ import android.app.AlertDialog
 import android.content.Context
 import android.content.Intent
 import android.content.res.ColorStateList
+import android.content.res.Configuration
+import androidx.core.view.doOnLayout
 import android.graphics.drawable.ColorDrawable
 import android.widget.FrameLayout
 import com.example.liquidglass.LiquidGlassView
@@ -133,12 +135,17 @@ class SettingsActivity : Activity() {
             Item(Page.APPEARANCE, "Theme", "theme style paper terminal mechanical liquid glass skin look") {
                 ui.themePicker { refreshPreview(); renderBody() }
             },
-            Item(Page.APPEARANCE, "Material You colors", "dynamic wallpaper theme", visible = { KbTheme.current(this).isGlass }) {
-                ui.toggle("Material You colors",
-                    if (Build.VERSION.SDK_INT >= 31) "Follow your wallpaper accent" else "Needs Android 12+, using default palette",
-                    "dynamic", true, enabled = Build.VERSION.SDK_INT >= 31, onChange = { recreate() })
+            // one mode for the keyboard AND this app: recreate so both wear it
+            Item(Page.APPEARANCE, "Mode", "dark light night theme mode system appearance") {
+                ui.segmentRow("Mode", "mode", "system", listOf("system" to "System", "light" to "Light", "dark" to "Dark")) { recreate() }
             },
-            Item(Page.APPEARANCE, "Accent color", "palette preset", visible = { KbTheme.current(this).isGlass && !Prefs.dynamic(this) }) { ui.accent { refreshPreview() } },
+            Item(Page.APPEARANCE, "Accent color", "palette preset color material you dynamic wallpaper pixel style hue custom tonal vivid muted bold", visible = { KbTheme.current(this).isGlass }) {
+                ui.accent { refreshPreview() }
+            },
+            Item(Page.APPEARANCE, "Three-tone accent", "primary secondary tertiary pixel material you colors palette accent", visible = { KbTheme.current(this).isGlass }) {
+                ui.toggle("Three-tone accent", "Like Pixel: primary on Enter, secondary on special keys, tertiary on Shift", "tritone", true,
+                    onChange = { refreshPreview(); renderBody() })
+            },
             Item(Page.APPEARANCE, "Blur background", "frosted glass", visible = { KbTheme.current(this).isGlass }) {
                 ui.toggle("Blur background",
                     if (blurOk) "Liquid Glass backdrop blur" else "Glass tint fallback; system blur unavailable",
@@ -213,6 +220,16 @@ class SettingsActivity : Activity() {
     private fun aboutItem(title: String) = items.first { it.page == Page.ABOUT && it.title == title }.make()
 
     private fun versionName(): String = try { packageManager.getPackageInfo(packageName, 0).versionName ?: "" } catch (e: Exception) { "" }
+
+    /** The in-app Mode (System / Light / Dark) also drives this app, not just the keyboard. */
+    override fun attachBaseContext(base: Context) {
+        val want = KbMode.night(base)
+        if (want == KbMode.systemNight(base)) { super.attachBaseContext(base); return }
+        val cfg = Configuration(base.resources.configuration)
+        cfg.uiMode = (cfg.uiMode and Configuration.UI_MODE_NIGHT_MASK.inv()) or
+            (if (want) Configuration.UI_MODE_NIGHT_YES else Configuration.UI_MODE_NIGHT_NO)
+        super.attachBaseContext(base.createConfigurationContext(cfg))
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         setTheme(if (Prefs.dynamic(this)) R.style.Theme_Pillboard_App else R.style.Theme_Pillboard_App_Static)
@@ -289,6 +306,12 @@ class SettingsActivity : Activity() {
         }
         renderPage()
         searchBar.post { (searchBar as? GlassBar)?.pulse(900) }
+        if (savedInstanceState != null) {
+            // recreated (accent / mode changed): fade in instead of flashing, and stay where the person was scrolled
+            rootCol.alpha = 0f; rootCol.animate().alpha(1f).setDuration(180).start()
+            val y = savedInstanceState.getInt("scrollY", 0)
+            if (y > 0) scroll.doOnLayout { it.scrollTo(0, y) }
+        }
     }
 
     /** Bottom padding of the list: the system bars / keyboard, plus room for the floating search capsule on Home. */
@@ -325,7 +348,7 @@ class SettingsActivity : Activity() {
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
-        super.onSaveInstanceState(outState); outState.putString("page", page.name)
+        super.onSaveInstanceState(outState); outState.putString("page", page.name); outState.putInt("scrollY", scroll.scrollY)
     }
 
     @Deprecated("Deprecated in Java")
@@ -398,10 +421,10 @@ class SettingsActivity : Activity() {
                 })
                 addView(LinearLayout(context).apply {
                     addView(ui.button("Enable", false) { startActivity(Intent(Settings.ACTION_INPUT_METHOD_SETTINGS)) },
-                        LinearLayout.LayoutParams(0, 46.dp, 1f).apply { marginEnd = 5.dp })
+                        LinearLayout.LayoutParams(0, 48.dp, 1f).apply { marginEnd = 5.dp })
                     addView(ui.button("Switch", true) {
                         (getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager).showInputMethodPicker()
-                    }, LinearLayout.LayoutParams(0, 46.dp, 1f).apply { marginStart = 5.dp })
+                    }, LinearLayout.LayoutParams(0, 48.dp, 1f).apply { marginStart = 5.dp })
                 }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = 16.dp })
             }, h = 16.dp, v = 16.dp), ui.lp(bottom = 14.dp))
             updateStatus()
@@ -511,7 +534,12 @@ class SettingsActivity : Activity() {
         MaterialAlertDialogBuilder(this).setTitle("Translation service")
             .setSingleChoiceItems(ps.map { it.label }.toTypedArray(), ps.indexOf(Translator.provider(this))) { d, i ->
                 Prefs.setStr(this, "tr_provider", ps[i].id); d.dismiss(); renderBody(animate = true)
-            }.setNegativeButton("Cancel", null).show()
+            }.setNegativeButton("Cancel", null).show().also { tintDialog(it) }
+    }
+
+    private fun tintDialog(d: androidx.appcompat.app.AlertDialog) {
+        d.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE)?.setTextColor(ui.primary)
+        d.getButton(androidx.appcompat.app.AlertDialog.BUTTON_NEGATIVE)?.setTextColor(ui.primary)
     }
 
     private fun pickTarget() {
@@ -519,7 +547,7 @@ class SettingsActivity : Activity() {
         MaterialAlertDialogBuilder(this).setTitle("Target language")
             .setSingleChoiceItems(ls.map { it.name }.toTypedArray(), ls.indexOfFirst { it.code == targetCode() }) { d, i ->
                 Prefs.setStr(this, "tr_target", ls[i].code); d.dismiss(); renderBody(animate = true)
-            }.setNegativeButton("Cancel", null).show()
+            }.setNegativeButton("Cancel", null).show().also { tintDialog(it) }
     }
 
     private fun editText(title: String, key: String, secret: Boolean) {
@@ -532,7 +560,7 @@ class SettingsActivity : Activity() {
         val wrap = android.widget.FrameLayout(this).apply { setPadding(24.dp, 8.dp, 24.dp, 0); addView(input) }
         MaterialAlertDialogBuilder(this).setTitle(title).setView(wrap)
             .setPositiveButton("Save") { _, _ -> Prefs.setStr(this, key, input.text.toString().trim()); renderBody(animate = true) }
-            .setNegativeButton("Cancel", null).show()
+            .setNegativeButton("Cancel", null).show().also { tintDialog(it) }
     }
 
     private fun confirmReset() {
@@ -541,7 +569,7 @@ class SettingsActivity : Activity() {
             .setMessage("Themes, layout and preferences will return to their defaults.")
             .setPositiveButton("Reset") { _, _ -> Prefs.clear(this); go(Page.HOME); recreate() }
             .setNegativeButton("Cancel", null).create()
-        d.setOnShowListener { d.getButton(AlertDialog.BUTTON_POSITIVE)?.setTextColor(ui.error) }
+        d.setOnShowListener { tintDialog(d); d.getButton(AlertDialog.BUTTON_POSITIVE)?.setTextColor(ui.error) }
         d.show()
     }
 
