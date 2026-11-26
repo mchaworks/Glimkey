@@ -83,6 +83,37 @@ class KeyPreview(ctx: Context, private val t: KbTokens) {
     private val lens: LensView? = if (t.isGlass && LensView.available() && Prefs.bool(ctx, "lens", true)) LensView(ctx, t) else null
     private val face: View = lens ?: bubble
     private val holder = shadowHolder(ctx, face)
+
+    /**
+     * The popup's content: ONE fixed window that spans the keyboard's width and reaches from above its top row down to
+     * the keyboard's bottom. It is never moved between presses. The bubble ([holder]) is placed inside it by layout,
+     * which happens in the same frame as the draw, so there is no window-manager round trip and the bubble can never
+     * show up at the previous key's spot. The window ignores touches, so the part over the keys/app is harmless.
+     */
+    private val stage = FrameLayout(ctx).apply {
+        clipChildren = false; clipToPadding = false
+        addView(holder, FrameLayout.LayoutParams(52.dp, 60.dp))
+    }
+    private var stageX = 0
+    private var stageY = 0
+    private var stageW = 0
+    private var stageH = 0
+
+    private fun stageGeom(root: View) {
+        val r = IntArray(2); root.getLocationOnScreen(r)
+        stageX = 0
+        stageY = (r[1] - 110.dp).coerceAtLeast(0)                       // room for the bubble above the top row
+        stageW = root.resources.displayMetrics.widthPixels
+        stageH = (r[1] + root.height + 8.dp - stageY).coerceAtLeast(120.dp)
+    }
+
+    private fun placeBubble(x: Int, y: Int, ww: Int, wh: Int) {
+        val lp = holder.layoutParams as FrameLayout.LayoutParams
+        lp.width = ww; lp.height = wh
+        lp.leftMargin = (x - stageX).coerceAtLeast(0)
+        lp.topMargin = (y - stageY).coerceAtLeast(0)
+        holder.layoutParams = lp
+    }
     private var popup: PopupWindow? = null
     private var owner: View? = null
     private var fading = false
@@ -98,12 +129,9 @@ class KeyPreview(ctx: Context, private val t: KbTokens) {
 
     // where a parked window waits: the top of the last pressed key, so it sits over the keyboard and never over the app
     // (the preview itself floats above the key, and an invisible window over the app could swallow the person's next tap)
-    private var parkX = 0
-    private var parkY = 0
 
     private fun park(p: PopupWindow) {
         if (!p.isShowing) return
-        try { p.update(parkX, parkY, -1, -1) } catch (_: Exception) { }
         face.visibility = View.INVISIBLE
         parked = true
         handler.removeCallbacks(reap)
@@ -122,13 +150,17 @@ class KeyPreview(ctx: Context, private val t: KbTokens) {
             val pad = KbTokens.POPUP_SHADOW_PAD
             val ww = 52.dp + pad * 2
             val wh = 60.dp + pad * 2
-            val p = popup ?: PopupWindow(holder, ww, wh, false).also { it.isTouchable = false; popup = it }
-            p.width = ww; p.height = wh
+            stageGeom(anchor.rootView)
+            placeBubble(stageX, stageY, ww, wh)
+            val p = popup ?: PopupWindow(stage, stageW, stageH, false).also { it.isTouchable = false; it.animationStyle = R.style.Pillboard_NoWindowAnim; popup = it }
+            p.width = stageW; p.height = stageH
             lens?.aim(anchor, "a")
             face.visibility = View.VISIBLE
             face.alpha = 0.01f
             warming = true
-            p.showAtLocation(anchor, Gravity.NO_GRAVITY, 0, 0)
+            val a = IntArray(2); anchor.getLocationOnScreen(a)
+            val w = IntArray(2); anchor.getLocationInWindow(w)
+            p.showAtLocation(anchor, Gravity.NO_GRAVITY, stageX - (a[0] - w[0]), stageY - (a[1] - w[1]))
             handler.postDelayed({
                 if (warming && owner == null && p.isShowing) { warming = false; face.alpha = 0f; park(p) }
             }, 300)
@@ -152,29 +184,27 @@ class KeyPreview(ctx: Context, private val t: KbTokens) {
         val bx = (loc[0] + key.width / 2 - bw / 2).coerceIn(2.dp, (screenW - bw - 2.dp).coerceAtLeast(2.dp))
         val x = (bx - pad).coerceAtLeast(0)
         val y = (loc[1] + 2.dp - bh - pad).coerceAtLeast(0)
-        parkX = x - ox; parkY = (loc[1] - oy).coerceAtLeast(0)
+        val oldX = stageX; val oldY = stageY; val oldW = stageW; val oldH = stageH
+        stageGeom(key.rootView)
+        // the window only ever moves when the keyboard itself moved or resized (rare); a key press never moves it
+        val geomChanged = Math.abs(oldX - stageX) > 2 || Math.abs(oldY - stageY) > 2 || Math.abs(oldW - stageW) > 2 || Math.abs(oldH - stageH) > 2
         bubble.text = glyph
         lens?.aim(key, glyph)
-        val sameKey = owner === key     // overlapping presses move the bubble to another key: never glide it there
+        val sameKey = owner === key
         owner = key
-        val p = popup ?: PopupWindow(holder, ww, wh, false).also { it.isTouchable = false; popup = it }
+        val p = popup ?: PopupWindow(stage, stageW, stageH, false).also { it.isTouchable = false; it.animationStyle = R.style.Pillboard_NoWindowAnim; popup = it }
         val wasSolid = p.isShowing && !fading && !wasParked && sameKey
         fading = false
         face.animate().cancel()
         val seq = ++moveSeq
+        placeBubble(x, y, ww, wh)                                // moves the bubble inside the window, same frame as its draw
         if (p.isShowing) {
-            if (wasSolid) {
-                p.update(x - ox, y - oy, ww, wh)
-                face.alpha = 1f; face.scaleX = 1f; face.scaleY = 1f; lens?.morph = 1f
-            } else {
-                // A window move reaches the screen a frame or two after update() returns. Starting the pop-in at once drew the
-                // bubble at the OLD spot (the warm-up window's corner, or the previous key) and it then ran to this key.
-                // So the bubble stays invisible until the move has landed, and only then grows out of the key. A key that
-                // is let go before that still gets its bubble (it just fades right after), so fast typing never skips one.
+            if (geomChanged) {
+                // keyboard moved/resized: the window has to move once. Hide the bubble until it has really arrived.
                 face.alpha = 0f
-                p.update(x - ox, y - oy, ww, wh)
+                p.update(stageX - ox, stageY - oy, stageW, stageH)
                 pendingReveal = true; releasedEarly = false
-                afterFrames(2) {
+                afterLanded(stageX, stageY) {
                     if (seq == moveSeq) {
                         pendingReveal = false
                         lens?.aim(key, glyph)
@@ -185,11 +215,16 @@ class KeyPreview(ctx: Context, private val t: KbTokens) {
                         }
                     }
                 }
+            } else if (wasSolid) {
+                face.alpha = 1f; face.scaleX = 1f; face.scaleY = 1f; lens?.morph = 1f
+            } else {
+                pendingReveal = false
+                morphFromKey(face, lens, bw, bh, key.width, key.height, t, motionOn)
             }
         } else {
-            p.width = ww; p.height = wh
+            p.width = stageW; p.height = stageH
             pendingReveal = false
-            p.showAtLocation(key, Gravity.NO_GRAVITY, x - ox, y - oy)
+            p.showAtLocation(key, Gravity.NO_GRAVITY, stageX - ox, stageY - oy)
             morphFromKey(face, lens, bw, bh, key.width, key.height, t, motionOn)
         }
     }
@@ -207,6 +242,26 @@ class KeyPreview(ctx: Context, private val t: KbTokens) {
         c.postFrameCallback(object : Choreographer.FrameCallback {
             override fun doFrame(frameTimeNanos: Long) {
                 if (--left > 0) c.postFrameCallback(this) else block()
+            }
+        })
+    }
+
+    /**
+     * Runs [block] once the popup window has really arrived at screen position ([tx], [ty]). Window moves are
+     * asynchronous and some OEM skins (HyperOS) take well over two frames, which showed the bubble at the previous
+     * key's spot before it jumped. The window's own on-screen position is polled; [maxFrames] is only a safety net.
+     */
+    private fun afterLanded(tx: Int, ty: Int, minFrames: Int = 2, maxFrames: Int = 14, block: () -> Unit) {
+        val c = Choreographer.getInstance()
+        val at = IntArray(2)
+        var frames = 0
+        c.postFrameCallback(object : Choreographer.FrameCallback {
+            override fun doFrame(frameTimeNanos: Long) {
+                frames++
+                at[0] = Int.MIN_VALUE; at[1] = Int.MIN_VALUE
+                try { stage.getLocationOnScreen(at) } catch (_: Exception) { }
+                val landed = Math.abs(at[0] - tx) <= 2 && Math.abs(at[1] - ty) <= 2
+                if ((frames >= minFrames && landed) || frames >= maxFrames) block() else c.postFrameCallback(this)
             }
         })
     }

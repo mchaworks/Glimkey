@@ -28,6 +28,7 @@ import android.widget.LinearLayout
 import android.widget.PopupWindow
 import android.widget.TextView
 import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 
 class PillboardService : InputMethodService() {
@@ -191,9 +192,12 @@ class PillboardService : InputMethodService() {
         host = h
         refraction = ShellRefraction(r, tokens.containerRadius)
         // Keep keys clear of the system navigation bar (fixes overlap on edge-to-edge Android 15+)
+        setupEdgeToEdgeWindow()
         ViewCompat.setOnApplyWindowInsetsListener(r) { _, insets ->
-            navInset = insets.getInsets(WindowInsetsCompat.Type.systemBars()).bottom
-            applyPadding()
+            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()).bottom
+            val nav = insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom
+            val n = maxOf(bars, nav)
+            if (n != navInset) { navInset = n; applyPadding() }
             insets
         }
         applyPadding()
@@ -267,6 +271,7 @@ class PillboardService : InputMethodService() {
         autoCap()
         applyBlur()
         render()
+        setupEdgeToEdgeWindow()
         root?.let { ViewCompat.requestApplyInsets(it) }
         // first-tap hitches: load the key sounds and compile the lens shader now, off the typing path
         if (Prefs.bool(this, "sound", false) && !TypingSound.isLoaded()) {
@@ -284,6 +289,24 @@ class PillboardService : InputMethodService() {
         stopTranslateState()
         Suggestions.save()
         super.onFinishInputView(finishingInput)
+    }
+
+    /**
+     * HyperOS (and other OEM skins) lay the IME window out above the navigation bar and paint the bar's area themselves
+     * (a light strip under the panel), and then hand the keys no bottom inset. Drawing the window edge to edge makes the
+     * glass run under the gesture bar and delivers the real inset, which [applyPadding] keeps the bottom row clear of.
+     */
+    private fun setupEdgeToEdgeWindow() {
+        val w = window.window ?: return
+        runCatching {
+            WindowCompat.setDecorFitsSystemWindows(w, false)
+            @Suppress("DEPRECATION")
+            w.navigationBarColor = Color.TRANSPARENT
+            if (Build.VERSION.SDK_INT >= 29) w.isNavigationBarContrastEnforced = false
+            // gesture pill / nav icons: dark on a light keyboard, light on a dark one
+            val light = androidx.core.graphics.ColorUtils.calculateLuminance(tokens.background) > 0.5
+            WindowCompat.getInsetsController(w, w.decorView).isAppearanceLightNavigationBars = light
+        }
     }
 
     private fun applyPadding() {

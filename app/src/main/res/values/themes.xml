@@ -17,4 +17,11 @@
     <style name="Overlay_Font_Mono"><item name="android:fontFamily">monospace</item></style>
     <style name="Overlay_Font_Medium"><item name="android:fontFamily">sans-serif-medium</item></style>
     <style name="Overlay_Font_Condensed"><item name="android:fontFamily">sans-serif-condensed</item></style>
+    <!-- Popup windows (key preview) must never get the OEM's own enter/exit/move animation -->
+    <style name="Pillboard.NoWindowAnim" parent="@android:style/Animation">
+        <item name="android:windowEnterAnimation">@null</item>
+        <item name="android:windowExitAnimation">@null</item>
+        <item name="android:windowShowAnimation">@null</item>
+        <item name="android:windowHideAnimation">@null</item>
+    </style>
 </resources>
