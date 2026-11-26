@@ -105,7 +105,7 @@ class KbTokens(ctx0: Context, val theme: KbTheme = KbTheme.current(ctx0)) {
     // non-glass shells are opaque: they never blur and are drawn by GlassSurfaceDrawable's themed path
     val glassFill = p?.bg ?: ColorUtils.setAlphaComponent(background, if (night) 0xD8 else 0xE8)
     /** Real backdrop blur keeps text legible, so the shell can be more translucent. */
-    val glassFillBlur = p?.bg ?: ColorUtils.setAlphaComponent(background, if (night) 0xB4 else 0xC8)
+    val glassFillBlur = p?.bg ?: ColorUtils.setAlphaComponent(background, (Prefs.int(ctx, "blur_tint", 62).coerceIn(10, 100) * 255 / 100))
     /** Blur requested but unavailable: no blur behind, so stay nearly opaque for readability. */
     val glassFillNoBlur = p?.bg ?: ColorUtils.setAlphaComponent(background, 0xF2)
     val glassStroke = p?.shellLine ?: ColorUtils.setAlphaComponent(c(MR.attr.colorOutlineVariant, if (night) Color.WHITE else Color.BLACK), if (night) 0x48 else 0x30)
@@ -127,8 +127,10 @@ class KbTokens(ctx0: Context, val theme: KbTheme = KbTheme.current(ctx0)) {
     // iOS 26 direction: neutral gray keycaps (special keys one step darker), accent only for the primary action
     private val hint = seed ?: c(MR.attr.colorPrimary, 0xFF6750A4.toInt())
     // three-tone: special keys wear the secondary container (a notch darker in light mode so they stay apart from the shell)
-    val special = p?.special ?: triad?.let { if (night) it.sc else tone(it.sc, Color.BLACK, 0.07f) }
-        ?: ColorUtils.blendARGB(tone(key, Color.BLACK, if (night) 0.30f else 0.20f), hint, 0.06f)
+    // special keys are the SHELL a step deeper (plus a little of the secondary tone), so they share its hue instead of reading as a different grey
+    private val specialBase = tone(background, Color.BLACK, if (night) 0.22f else 0.09f)
+    val special = p?.special ?: triad?.let { ColorUtils.blendARGB(specialBase, it.sc, 0.25f) }
+        ?: ColorUtils.blendARGB(specialBase, hint, 0.06f)
     val specialText = p?.specialText ?: triad?.onSc ?: keyText
     /** Ink of a special key while pressed. */
     val pressedSpecialText = p?.pressedText ?: triad?.onSc ?: keyText

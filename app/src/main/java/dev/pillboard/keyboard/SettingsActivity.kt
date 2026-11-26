@@ -151,6 +151,9 @@ class SettingsActivity : Activity() {
                     if (blurOk) "Liquid Glass backdrop blur" else "Glass tint fallback; system blur unavailable",
                     "blur", false, enabled = true, onChange = { blurStatusValue?.setTextBlur(blurStatus()) })
             },
+            Item(Page.APPEARANCE, "Blur tint", "blur tint opacity transparency glass shell frosted clear see through", visible = { KbTheme.current(this).isGlass }) {
+                ui.slider("Blur tint", 10, 100, "blur_tint", 62, listOf("Clear" to 30, "Standard" to 62, "Frosted" to 85), unit = "%") { refreshPreview() }
+            },
             Item(Page.APPEARANCE, "Blur status", "blur glass system available blocked", visible = { KbTheme.current(this).isGlass }) {
                 ui.info("Blur status", blurStatus()).also { blurStatusValue = it.findViewWithTag<BlurTextView>("value") }
             },
@@ -593,7 +596,7 @@ class SettingsActivity : Activity() {
         val card = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(5.dp, 6.dp, 5.dp, 6.dp)
-            background = t.shell()
+            background = t.shell(if (t.isGlass && Prefs.bool(this@SettingsActivity, "blur", false)) t.glassFillBlur else t.glassFill)
         }
         // same refraction as the real keyboard, so the toggle is visible right here
         if (Build.VERSION.SDK_INT >= 33 && t.isGlass) ShellRefraction(card, t.containerRadius).update(Prefs.bool(this, "refract", false))
