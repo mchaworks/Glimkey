@@ -179,7 +179,16 @@ class SettingsActivity : Activity() {
             Item(Page.APPEARANCE, "Key spacing", "gap margin tight") {
                 ui.slider("Key spacing", 2, 6, KbTheme.current(this).keyGapKey, KbTheme.current(this).keyGapDp, listOf("Tight" to 2, "Standard" to KbTheme.current(this).keyGapDp, "Roomy" to 5)) { refreshPreview() }
             },
-            Item(Page.FEEDBACK, "Haptic feedback", "vibration vibrate") { ui.toggle("Haptic feedback", "Vibrate on key press", "haptic", true) },
+            Item(Page.FEEDBACK, "Haptic feedback", "vibration vibrate") { ui.toggle("Haptic feedback", "Vibrate on key press", "haptic", true) { renderBody(animate = true) } },
+            Item(Page.FEEDBACK, "Haptic strength", "vibration vibrate strength intensity power haptic light strong", visible = { Prefs.bool(this, "haptic", true) }) {
+                ui.slider("Haptic strength", 5, 100, "haptic_strength", 70, listOf("Light" to 35, "Standard" to 70, "Strong" to 100), unit = "%") { Haptics.play(this) }
+            },
+            Item(Page.FEEDBACK, "Haptic style", "vibration vibrate style feel crisp soft heavy mechanical click haptic", visible = { Prefs.bool(this, "haptic", true) }) {
+                ui.cycle("Haptic style", "haptic_style", "crisp", HapticStyle.values().map { it.id to it.label }) { Haptics.play(this) }
+            },
+            Item(Page.FEEDBACK, "Release tick", "vibration haptic release lift finger up tick", visible = { Prefs.bool(this, "haptic", true) }) {
+                ui.toggle("Release tick", "A faint tick when you lift your finger off a key", "haptic_release", true) { if (it) Haptics.play(this, HAPTIC_RELEASE) }
+            },
             Item(Page.FEEDBACK, "Typing sound", "sound click key audio android 17") { ui.toggle("Typing sound", "Play a click on every key press", "sound", false) { if (it) TypingSound.play(this, TypingSound.Kind.STANDARD) } },
             Item(Page.FEEDBACK, "Sound style", "android ios thock boba tofu foam click style") {
                 ui.cycle("Sound style", "sound_style", TypingSound.styleOf(this), TypingSound.STYLES) { TypingSound.release(); TypingSound.play(this, TypingSound.Kind.STANDARD) }

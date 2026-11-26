@@ -61,27 +61,5 @@ object Prefs {
     fun clear(c: Context) = sp(c).edit().clear().apply()
 }
 
-private var cachedVibrator: android.os.Vibrator? = null
-
-/**
- * One place for key haptics: honours the in-app toggle AND still vibrates when the system-wide "touch feedback" is off.
- * FLAG_IGNORE_GLOBAL_SETTING is deprecated since API 33, so there we drive the Vibrator directly (needs VIBRATE).
- */
-@Suppress("DEPRECATION")
-fun android.view.View.keyHaptic(kind: Int = android.view.HapticFeedbackConstants.KEYBOARD_TAP) {
-    if (!Prefs.bool(context, "haptic", true)) return
-    if (android.os.Build.VERSION.SDK_INT >= 33) {
-        val v = cachedVibrator ?: (context.getSystemService(android.content.Context.VIBRATOR_MANAGER_SERVICE)
-            as android.os.VibratorManager).defaultVibrator.also { cachedVibrator = it }
-        if (v.hasVibrator()) {
-            val effect = when (kind) {
-                android.view.HapticFeedbackConstants.LONG_PRESS -> android.os.VibrationEffect.EFFECT_HEAVY_CLICK
-                android.view.HapticFeedbackConstants.CLOCK_TICK -> android.os.VibrationEffect.EFFECT_TICK
-                else -> android.os.VibrationEffect.EFFECT_CLICK
-            }
-            v.vibrate(android.os.VibrationEffect.createPredefined(effect))
-            return
-        }
-    }
-    performHapticFeedback(kind, android.view.HapticFeedbackConstants.FLAG_IGNORE_GLOBAL_SETTING)
-}
+/** Key haptics: see [Haptics] (style, strength, release tick); the in-app toggle is honoured there. */
+fun android.view.View.keyHaptic(kind: Int = android.view.HapticFeedbackConstants.KEYBOARD_TAP) = Haptics.play(context, kind, this)
