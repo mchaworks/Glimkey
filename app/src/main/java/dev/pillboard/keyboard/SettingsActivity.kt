@@ -277,6 +277,10 @@ class SettingsActivity : Activity() {
             Item(Page.FEEDBACK, "Sound style", "android ios thock boba tofu foam click style") {
                 ui.cycle("Sound style", "sound_style", TypingSound.styleOf(this), TypingSound.STYLES) { TypingSound.release(); TypingSound.play(this, TypingSound.Kind.STANDARD) }
             },
+            Item(Page.LOOK_FX, "Lighter key animation", "blur replace shift page switch lag smooth fast light performance gpu") {
+                ui.toggle("Lighter key animation", "Shift and page changes fade and drift the letters without the GPU blur (smoother on weaker phones). Applies the next time the keyboard rebuilds.",
+                    "blur_text_lite", false)
+            },
             Item(Page.LOOK_FX, "Tap effect", "tap effect animation ripple sparkle hearts bubbles confetti petals keys cafe") {
                 ui.cycle("Tap effect", TapEffect.PREF, TapEffect.current(this).id, TapEffect.STYLES) { }
             },
@@ -715,7 +719,7 @@ class SettingsActivity : Activity() {
             Page.LOOK_COLOR to listOf("preset", "accent_v2", "dynamic", "hue", "accent_style", "tritone"),
             Page.LOOK_GLASS to listOf("blur", "blur_tint", "blur_radius", "key_alpha", "refract", "lens", "preview_blur", "preview_blur_amt", "preview_blur_tint"),
             Page.LOOK_KEYS to listOf("keypreview", "key_h", "key_h_land") + KbTheme.values().flatMap { listOf(it.keyRKey, it.keyGapKey) },
-            Page.LOOK_FX to listOf(TapEffect.PREF, TapEffect.COLOR_PREF, BackEffect.PREF),
+            Page.LOOK_FX to listOf(TapEffect.PREF, TapEffect.COLOR_PREF, BackEffect.PREF, "blur_text_lite"),
         )
     }
 

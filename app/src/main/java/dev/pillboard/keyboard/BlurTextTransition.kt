@@ -17,7 +17,7 @@ import kotlin.math.max
  * one. One shared clock; it stops itself when everything has settled.
  */
 internal class BlurTextTransition(private val host: TextView) {
-    private val renderer = BlurTextRenderer(host.resources.displayMetrics.density)
+    private val renderer = BlurTextRenderer(host.resources.displayMetrics.density, Prefs.bool(host.context, "blur_text_lite", false))
     private val layers = ArrayList<BlurTextLayer>(4)
     private var clock: ValueAnimator? = null
 
