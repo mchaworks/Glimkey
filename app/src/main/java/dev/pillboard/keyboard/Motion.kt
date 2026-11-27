@@ -27,3 +27,9 @@ class SpringInterpolator(private val damping: Float = 0.62f, private val omega: 
         return (1.0 - exp(-zeta * w * t) * (cos(wd * t) + k * sin(wd * t))).toFloat()
     }
 }
+
+/** A fixed-length, overshoot-free curve with the same surface as [SpringInterpolator] ([settleMs] + getInterpolation), so a morph can swap a spring for the shared text timeline. */
+class TimelineEase(private val ms: Long, private val curve: android.view.animation.Interpolator) : Interpolator {
+    val settleMs: Long get() = ms
+    override fun getInterpolation(x: Float): Float = curve.getInterpolation(x.coerceIn(0f, 1f))
+}

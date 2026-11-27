@@ -117,8 +117,6 @@ class KbTokens(ctx0: Context, val theme: KbTheme = KbTheme.current(ctx0)) {
     /** Liquid Glass keycap opacity (Settings > Appearance > Glass & blur > Key opacity): below 100% the keys are glass too and the blur shows through them. */
     private val keyAlpha = if (isGlass) Prefs.int(ctx, "key_alpha", 100).coerceIn(30, 100) * 255 / 100 else 255
     private fun ka(c: Int) = if (keyAlpha >= 255) c else ColorUtils.setAlphaComponent(c, keyAlpha)
-    /** Special keys (shift, 123, space...) stay at least ~90% opaque: translucent they vanish into the blurred panel over a light app and turn muddy over a dark one. */
-    private fun kaSpecial(c: Int) = if (keyAlpha >= 255) c else ColorUtils.setAlphaComponent(c, maxOf(keyAlpha, 0xE6))
     private val keyBase = p?.key ?: seedTri?.takeIf { night }?.let { ColorUtils.blendARGB(0xFF3C3C42.toInt(), it.pc, 0.20f) } ?: if (night) tone(c(MR.attr.colorSurfaceContainerHighest, 0xFF36343B.toInt()), Color.WHITE, 0.10f)
               else c(MR.attr.colorSurfaceContainerLowest, Color.WHITE)
     val key = ka(keyBase)
@@ -136,45 +134,16 @@ class KbTokens(ctx0: Context, val theme: KbTheme = KbTheme.current(ctx0)) {
 
     // iOS 26 direction: neutral gray keycaps (special keys one step darker), accent only for the primary action
     private val hint = seed ?: c(MR.attr.colorPrimary, 0xFF6750A4.toInt())
-    // three-tone: special keys wear the secondary container (a notch darker in light mode so they stay apart from the shell)
-    // special keys are the SHELL a step deeper (plus a little of the secondary tone), so they share its hue instead of reading as a different grey
-    // light: a touch darker than the LETTER key (same family, clean light grey), not than the shell: a shell-derived grey turned muddy over the blur
-    private val specialBase = if (night) tone(background, Color.BLACK, 0.22f) else tone(keyBase, Color.BLACK, 0.09f)
-    /**
-     * The shell as it reads over the worst-case app (white in light, black in night): the glass tint composited on that
-     * backdrop when blur is on, the solid shell colour otherwise. An IME window cannot sample the app behind it, so
-     * this estimate is what special keys are kept apart from.
-     */
-    private val shellSeen: Int = run {
-        val blurOn = Prefs.bool(ctx, "blur", false)
-        val behind = if (night) Color.BLACK else Color.WHITE
-        if (blurOn) ColorUtils.compositeColors(glassFillBlur, behind) else background or 0xFF000000.toInt()
-    }
-    /** Nudges [base] toward black (light) or white (night) until it holds [want]:1 against [shell]; flat, no outline. */
-    private fun separated(base: Int, shell: Int): Int {
-        if (!Prefs.bool(ctx, "special_contrast", true)) return base
-        val opaque = base or 0xFF000000.toInt()
-        val s = shell or 0xFF000000.toInt()
-        val toward = if (night) Color.WHITE else Color.BLACK
-        val want = if (night) 1.25 else 1.35
-        var out = opaque
-        var r = 0f
-        while (r < 0.5f && ColorUtils.calculateContrast(out, s) < want) {
-            r += 0.02f
-            out = ColorUtils.blendARGB(opaque, toward, r)
-        }
-        return ColorUtils.setAlphaComponent(out, Color.alpha(base))
-    }
-    val special = kaSpecial(p?.special ?: separated(
-        triad?.let { ColorUtils.blendARGB(specialBase, it.sc, 0.25f) } ?: ColorUtils.blendARGB(specialBase, hint, 0.06f),
-        shellSeen))
-    val specialText = p?.specialText ?: triad?.onSc ?: keyText
+    // special keys (shift, 123, comma, space, period, backspace) wear exactly the letter-key colour, ink and press tone;
+    // only the action key (return) stands apart. Themed palettes keep their own special colours.
+    val special = p?.special ?: key
+    val specialText = p?.specialText ?: keyText
     /** Ink of a special key while pressed. */
-    val pressedSpecialText = p?.pressedText ?: triad?.onSc ?: keyText
+    val pressedSpecialText = p?.pressedText ?: keyText
     val pressed = p?.pressed ?: if (night) tone(key, Color.WHITE, 0.16f) else tone(key, Color.BLACK, 0.12f)
     val pressedText = p?.pressedText ?: keyText
-    /** What a special key turns into while pressed: iOS flips it to the letter-key tone. */
-    val pressedSpecial = p?.pressedSpecial ?: triad?.let { tone(special, if (night) Color.WHITE else Color.BLACK, 0.12f) } ?: key
+    /** What a special key turns into while pressed: the same press tone as a letter key. */
+    val pressedSpecial = p?.pressedSpecial ?: pressed
     val accent = p?.accent ?: triad?.p ?: seed ?: c(MR.attr.colorPrimary, Color.BLUE)
     val onAccent = p?.onAccent ?: triad?.onP ?: seed?.let { if (ColorUtils.calculateContrast(Color.WHITE, it) >= 3.0) Color.WHITE else 0xFF10181D.toInt() }
         ?: c(MR.attr.colorOnPrimary, Color.WHITE)

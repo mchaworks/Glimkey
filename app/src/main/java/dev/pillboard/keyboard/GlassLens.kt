@@ -31,10 +31,10 @@ class LensView(ctx: Context, private val t: KbTokens) : LiquidGlassView(ctx) {
     init {
         cornerRadius = t.popupRadius
         bevelWidth = 12.dp.toFloat()
-        refractionHeight = 9.dp.toFloat()
-        dispersionStrength = 0.12f
+        refractionHeight = 6.dp.toFloat()
+        dispersionStrength = 0.04f
         blurAmount = 0.10f
-        glassTint = ColorUtils.setAlphaComponent(t.key, 0xD2)   // mostly opaque: above the keyboard window there is nothing to sample, so a see-through bubble went dark
+        glassTint = ColorUtils.setAlphaComponent(t.key, 0xF2)   // nearly opaque: the window blur is the compositor's, so the lens only sees the shell tint, the keys and the strip text; any more see-through and they ghost through as grey streaks
         enablePressEffect = false                 // the popup never takes touches; the preview animates the view itself
         addView(glyph, FrameLayout.LayoutParams(-1, -1, Gravity.CENTER))
     }

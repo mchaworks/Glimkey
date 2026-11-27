@@ -1078,8 +1078,8 @@ class PillboardService : InputMethodService() {
     private val trStripH get() = 42.dp
     /** Shell height of the translate dock: roughly two key rows, above the full keyboard. */
     private val trDockH get() = 112.dp
-    /** Spring of the language picker morph (the dock itself no longer animates its height: see [playDockEnter]). */
-    private val trSpring = SpringInterpolator(0.96f, 19f)
+    /** Timeline of the dock and language picker morphs: the same length and curve as the label and keycap morphs, no spring, no overshoot. */
+    private val trSpring = TimelineEase(BlurTextTokens.TOTAL_MS, BlurTextTokens.inEase)
     // stagger of the dock's parts when it opens (ms after the morph starts): the row left to right, then the result card
     private val trPartStart = 40L
     private val trPartStep = 22L
