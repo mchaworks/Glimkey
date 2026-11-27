@@ -1071,15 +1071,9 @@ class PillboardService : InputMethodService() {
         translateMode = true
         trSrcPick = "auto"; trTgtPick = null; trSwapTurns = 0
         trState = TrState.IDLE; trText = null; trSrc = null; trMsg = ""
-        val extra = (trDockH - trStripH).coerceAtLeast(0)
-        if (ghost != null && rect != null && extra > 0) {
-            // the window takes its final size at once; the shell's top edge starts [extra] px down and rises (playDockEnter).
-            // The window blur would cover the whole window, so it is switched off first and the fill firms up over it.
-            fadeBlur(0f, fillK, 0L)
-            fadeBlur(0f, 1f, 100L)
-            setInsetHold(extra)
-            setShellTop(extra)
-        }
+        // The window keeps its height: the dock takes the room from the key rows (see keyHeight), so nothing grows upward,
+        // the app is not resized, and the window blur stays on the whole time.
+        val extra = 0
         render()
         requestTranslate()
         if (ghost != null && rect != null) playDockEnter(ghost, rect, extra)
@@ -1101,7 +1095,6 @@ class PillboardService : InputMethodService() {
         if (animate && dock != null) {
             bmp = snapshot(dock)
             rect = android.graphics.Rect(dock.left, dock.top, dock.right, dock.bottom)
-            extra = (dock.height - trStripH).coerceAtLeast(0)
         }
         stopTranslateState()
         val morph = bmp != null && rect != null && extra > 0
@@ -2071,11 +2064,15 @@ class PillboardService : InputMethodService() {
         val land = resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
         val pref = (if (land) Prefs.int(this, "key_h_land", 42) else Prefs.int(this, "key_h", 50)).dp
         val rows = 4f + (if (Prefs.bool(this, "numrow", false) && !symbols) 0.8f else 0f)
-        val stripH = if (translateMode) trDockH + 3.dp else if (Prefs.bool(this, "suggest", true) || Prefs.bool(this, "translate", false)) 45.dp else 0
+        val stripH = if (Prefs.bool(this, "suggest", true) || Prefs.bool(this, "translate", false)) 45.dp else 0
         val budget = resources.displayMetrics.heightPixels * 0.55f - stripH - 16.dp - navInset
         val margins = (2 * Prefs.keyGap(this) + 4).dp
         val fit = (budget / rows).toInt() - margins
-        return minOf(pref, fit).coerceAtLeast(34.dp)
+        val normal = minOf(pref, fit).coerceAtLeast(34.dp)
+        if (!translateMode) return normal
+        // translate dock: the window stays exactly as tall as with the strip, the rows give up what the dock needs on top of the strip
+        val save = (trDockH - trStripH).coerceAtLeast(0) / rows
+        return (normal - save).toInt().coerceAtLeast(26.dp)
     }
 
     private fun rowOf(build: LinearLayout.() -> Unit) = LinearLayout(themed).apply {
