@@ -79,11 +79,55 @@ class KeyPreview(ctx: Context, private val t: KbTokens) {
         background = t.popupBackground()
         elevation = t.popupElevation
     }
-    /** API 33+: a liquid-glass bubble (Liquid-Glass-Android) that bends the keys around it; otherwise the plain bubble above. */
-    private val lens: LensView? = if (t.isGlass && LensView.available() && Prefs.bool(ctx, "lens", true)) LensView(ctx, t) else null
+    // ---- frosted preview: a small, downscaled capture of the keyboard under the bubble, blurred on the GPU, with the key tone over it ----
+    private val frostOn = android.os.Build.VERSION.SDK_INT >= 31 && t.isGlass && Prefs.bool(ctx, "preview_blur", true)
+    private val solidBg: Drawable = bubble.background
+    private val frostBg: Drawable? = if (frostOn) GlassSurfaceDrawable(t, t.popupRadius, ColorUtils.setAlphaComponent(t.key, 0xA6), GlassSurfaceDrawable.Style.FLOATING, useShader = false) else null
+    private val frostView: android.widget.ImageView? = if (frostOn) makeFrost(ctx) else null
+    private var frostBmp: android.graphics.Bitmap? = null
+
+    @androidx.annotation.RequiresApi(31)
+    private fun makeFrost(c: Context) = android.widget.ImageView(c).apply {
+        scaleType = android.widget.ImageView.ScaleType.FIT_XY
+        clipToOutline = true
+        outlineProvider = object : android.view.ViewOutlineProvider() {
+            override fun getOutline(v: View, o: android.graphics.Outline) { o.setRoundRect(0, 0, v.width, v.height, t.popupRadius) }
+        }
+        val r = 5.dp.toFloat()
+        setRenderEffect(android.graphics.RenderEffect.createBlurEffect(r, r, android.graphics.Shader.TileMode.CLAMP))
+        visibility = View.GONE
+    }
+
+    /**
+     * Draws the keyboard window's patch under the bubble (screen rect [left], [top], [w] x [h]) into a quarter-size bitmap:
+     * only the views that intersect the patch are drawn, so a press costs a few small draws, not a window capture. The
+     * blur itself is a RenderEffect on the ImageView. Any failure just leaves the plain bubble.
+     */
+    private fun captureFrost(key: View, left: Int, top: Int, w: Int, h: Int): Boolean {
+        val fv = frostView ?: return false
+        return try {
+            val root = key.rootView
+            val rl = IntArray(2); root.getLocationOnScreen(rl)
+            val sc = 0.25f
+            val bw = (w * sc).toInt().coerceAtLeast(8)
+            val bh = (h * sc).toInt().coerceAtLeast(8)
+            val bmp = frostBmp?.takeIf { it.width == bw && it.height == bh && !it.isRecycled }
+                ?: android.graphics.Bitmap.createBitmap(bw, bh, android.graphics.Bitmap.Config.ARGB_8888).also { frostBmp = it }
+            bmp.eraseColor(t.background or 0xFF000000.toInt())          // where the patch sticks out of the window: the shell tone, never black
+            val c = Canvas(bmp)
+            c.scale(bw.toFloat() / w, bh.toFloat() / h)
+            c.translate((rl[0] - left).toFloat(), (rl[1] - top).toFloat())
+            root.draw(c)
+            fv.setImageBitmap(bmp)
+            true
+        } catch (_: Throwable) { false }
+    }
+    /** Opt-in (Settings > Liquid lens, off by default: it re-renders the keyboard window per press and lags): a liquid-glass bubble that bends the keys around it. Otherwise the plain frosted bubble above: a near-opaque key-tone tint with a soft top light, hairline and shadow, no per-frame backdrop work. */
+    private val lens: LensView? = if (t.isGlass && LensView.available() && Prefs.bool(ctx, "lens", false)) LensView(ctx, t) else null
     /** Holds the lens AND the plain bubble; [show] picks one per press (the lens has nothing to refract where it sticks out above the keyboard window). */
     private val face: View = FrameLayout(ctx).apply {
         clipChildren = false; clipToPadding = false
+        frostView?.let { addView(it, FrameLayout.LayoutParams(-1, -1)) }
         addView(bubble, FrameLayout.LayoutParams(-1, -1))
         lens?.let { addView(it, FrameLayout.LayoutParams(-1, -1)); bubble.visibility = View.GONE }
     }
@@ -199,6 +243,10 @@ class KeyPreview(ctx: Context, private val t: KbTokens) {
         // the window only ever moves when the keyboard itself moved or resized (rare); a key press never moves it
         val geomChanged = Math.abs(oldX - stageX) > 2 || Math.abs(oldY - stageY) > 2 || Math.abs(oldW - stageW) > 2 || Math.abs(oldH - stageH) > 2
         bubble.text = glyph
+        val useFrost = !useLens && captureFrost(key, bx, loc[1] + 2.dp - bh, bw, bh)
+        frostView?.visibility = if (useFrost) View.VISIBLE else View.GONE
+        val wantBg = if (useFrost) frostBg else solidBg
+        if (wantBg != null && bubble.background !== wantBg) bubble.background = wantBg
         if (useLens) lens?.aim(key, glyph)
         val sameKey = owner === key
         owner = key

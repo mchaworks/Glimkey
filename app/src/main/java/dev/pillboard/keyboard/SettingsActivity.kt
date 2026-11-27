@@ -219,8 +219,13 @@ class SettingsActivity : Activity() {
             },
             Item(Page.LOOK_GLASS, "Liquid lens", "refraction lens magnifier key preview glass", visible = { KbTheme.current(this).isGlass }) {
                 ui.toggle("Liquid lens",
-                    if (Build.VERSION.SDK_INT >= 33) "Key preview refracts the keys around it" else "Needs Android 13+, using the plain bubble",
-                    "lens", true, enabled = Build.VERSION.SDK_INT >= 33)
+                    if (Build.VERSION.SDK_INT >= 33) "Key preview refracts the keys around it (heavier: can lag)" else "Needs Android 13+, using the plain bubble",
+                    "lens", false, enabled = Build.VERSION.SDK_INT >= 33)
+            },
+            Item(Page.LOOK_GLASS, "Frosted key preview", "frosted blur glass key preview bubble popup", visible = { KbTheme.current(this).isGlass }) {
+                ui.toggle("Frosted key preview",
+                    if (Build.VERSION.SDK_INT >= 31) "Key preview blurs the keys under it (light, no lens)" else "Needs Android 12+, using the plain bubble",
+                    "preview_blur", true, enabled = Build.VERSION.SDK_INT >= 31)
             },
             Item(Page.LOOK_KEYS, "Key preview", "popup bubble character magnify") {
                 ui.toggle("Key preview", "Floating character bubble above the pressed key", "keypreview", true)
@@ -702,7 +707,7 @@ class SettingsActivity : Activity() {
                 "haptic_slide", "sound", "sound_style", "sound_vol"),
             Page.LOOK_THEME to listOf(KbTheme.PREF, "mode"),
             Page.LOOK_COLOR to listOf("preset", "accent_v2", "dynamic", "hue", "accent_style", "tritone"),
-            Page.LOOK_GLASS to listOf("blur", "blur_tint", "blur_radius", "key_alpha", "refract", "lens"),
+            Page.LOOK_GLASS to listOf("blur", "blur_tint", "blur_radius", "key_alpha", "refract", "lens", "preview_blur"),
             Page.LOOK_KEYS to listOf("keypreview", "key_h", "key_h_land") + KbTheme.values().flatMap { listOf(it.keyRKey, it.keyGapKey) },
             Page.LOOK_FX to listOf(TapEffect.PREF, TapEffect.COLOR_PREF, BackEffect.PREF),
         )
