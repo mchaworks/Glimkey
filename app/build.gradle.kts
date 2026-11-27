@@ -17,6 +17,16 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     kotlinOptions { jvmTarget = "17" }
+    buildTypes {
+        // same code as debug, but not debuggable: ART optimises it fully, so the keyboard runs smoother and lighter
+        release {
+            isDebuggable = false
+            isMinifyEnabled = false
+            isShrinkResources = false
+            signingConfig = signingConfigs.getByName("debug")
+        }
+    }
+    lint { checkReleaseBuilds = false }
 }
 dependencies {
     implementation("com.google.android.material:material:1.12.0")
