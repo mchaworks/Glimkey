@@ -892,20 +892,20 @@ class PillboardService : InputMethodService() {
                 swapShell(BlurDir.UP) { stopTranslateState(); panel = Panel.NOTES; render() }
             }
         }
-        val save = TextView(themed).apply {
-            text = "Save"; textSize = 14f; gravity = Gravity.CENTER
-            setPadding(14.dp, 0, 14.dp, 0); setTextColor(tokens.keyText)
-            if (medium != null) typeface = medium
-            background = tokens.stripItemBackground()
-            setOnClickListener { finishNote() }
+        val save = noteBtn("Save", primary = true) { finishNote() }
+        val paste = noteBtn("Paste") {
+            lastFix = null
+            noteConn?.performContextMenuAction(android.R.id.paste)
         }
-        val closeH = holder(close); val allH = holder(all); val insH = holder(save)
+        fun pill(v: View) = FrameLayout(themed).apply { addView(v, FrameLayout.LayoutParams(WRAP_CONTENT, MATCH_PARENT).apply { setMargins(2.dp, 2.dp, 2.dp, 2.dp) }) }
+        val closeH = holder(close); val allH = holder(all); val pasteH = pill(paste); val insH = pill(save)
         val row = LinearLayout(themed).apply {
             orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false
             addView(closeH, LinearLayout.LayoutParams(40.dp, MATCH_PARENT))
             addView(title, LinearLayout.LayoutParams(0, MATCH_PARENT, 1f))
             addView(status, LinearLayout.LayoutParams(WRAP_CONTENT, MATCH_PARENT))
             addView(allH, LinearLayout.LayoutParams(38.dp, MATCH_PARENT))
+            addView(pasteH, LinearLayout.LayoutParams(WRAP_CONTENT, MATCH_PARENT))
             addView(insH, LinearLayout.LayoutParams(WRAP_CONTENT, MATCH_PARENT))
         }
         val rad = Prefs.keyRadius(this).dp.toFloat()
@@ -928,7 +928,7 @@ class PillboardService : InputMethodService() {
             addView(row, LinearLayout.LayoutParams(MATCH_PARENT, 36.dp))
             addView(card, LinearLayout.LayoutParams(MATCH_PARENT, 0, 1f).apply { topMargin = 3.dp })
         }
-        trParts = listOf(closeH, allH, insH, card)
+        trParts = listOf(closeH, allH, pasteH, insH, card)
         trContent = content
         content.translationY = shellTop.toFloat()
         val dock = LinearLayout(themed).apply {
@@ -944,6 +944,34 @@ class PillboardService : InputMethodService() {
     }
 
     private var viewNoteId = 0L
+
+    /** A button in the keyboard's own look: a key-radius pill (accent-filled when [primary]) that darkens while pressed. */
+    private fun noteBtn(label: String, primary: Boolean = false, onClick: (TextView) -> Unit): TextView {
+        val rad = Prefs.keyRadius(this).dp.toFloat()
+        val fill = if (primary) tokens.accent else tokens.pressed
+        val dark = if (primary) androidx.core.graphics.ColorUtils.blendARGB(fill, 0xFF000000.toInt(), 0.18f)
+                   else androidx.core.graphics.ColorUtils.blendARGB(fill, tokens.keyText, 0.14f)
+        val fg = if (!primary) tokens.keyText
+                 else if (androidx.core.graphics.ColorUtils.calculateContrast(0xFFFFFFFF.toInt(), fill) >= 3.0) 0xFFFFFFFF.toInt() else 0xFF10181D.toInt()
+        fun shape(c: Int) = GradientDrawable().apply { setColor(c); cornerRadius = rad }
+        return TextView(themed).apply {
+            text = label; textSize = 13.5f; gravity = Gravity.CENTER; maxLines = 1
+            setPadding(13.dp, 0, 13.dp, 0); setTextColor(fg)
+            ResourcesCompat.getFont(themed, R.font.gsr_medium)?.let { typeface = it }
+            background = android.graphics.drawable.StateListDrawable().apply {
+                addState(intArrayOf(android.R.attr.state_pressed), shape(dark))
+                addState(intArrayOf(), shape(fill))
+            }
+            setOnClickListener { onClick(this) }
+        }
+    }
+
+    /** Delete asks twice: the first tap turns the label into "Sure?" (red) for a moment. */
+    private fun confirmDelete(b: TextView, label: String, onDelete: () -> Unit) {
+        if (b.tag == true) { onDelete(); return }
+        b.tag = true; b.text = "Sure?"; b.setTextColor(0xFFE5484D.toInt())
+        b.postDelayed({ if (b.isAttachedToWindow) { b.tag = false; b.text = label; b.setTextColor(tokens.keyText) } }, 2500L)
+    }
 
     private fun openNoteView(n: Note) = swapShell(BlurDir.UP) { viewNoteId = n.id; panel = Panel.NOTE_VIEW; render() }
 
@@ -963,12 +991,22 @@ class PillboardService : InputMethodService() {
                 isVerticalScrollBarEnabled = false; overScrollMode = View.OVER_SCROLL_NEVER
                 addView(body, FrameLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
             }
-            val edit = TextView(themed).apply {
-                text = "Edit"; textSize = 14f; gravity = Gravity.CENTER
-                setPadding(20.dp, 0, 20.dp, 0); setTextColor(tokens.keyText)
-                ResourcesCompat.getFont(themed, R.font.gsr_medium)?.let { typeface = it }
-                background = GradientDrawable().apply { setColor(tokens.pressed); cornerRadius = 20.dp.toFloat() }
-                setOnClickListener { if (n != null) openNote(n) }
+            val actions = LinearLayout(themed).apply {
+                orientation = LinearLayout.HORIZONTAL
+                if (n != null) {
+                    addView(noteBtn("Copy") { t ->
+                        (getSystemService(android.content.ClipboardManager::class.java))
+                            .setPrimaryClip(android.content.ClipData.newPlainText("note", n.body))
+                        t.text = "Copied"; t.postDelayed({ if (t.isAttachedToWindow) t.text = "Copy" }, 1200L)
+                    }, lp(WRAP_CONTENT, MATCH_PARENT))
+                    addView(noteBtn("Delete") { t ->
+                        confirmDelete(t, "Delete") {
+                            NoteStore.delete(this@PillboardService, n.id)
+                            swapShell(BlurDir.DOWN) { panel = Panel.NOTES; render() }
+                        }
+                    }, lp(WRAP_CONTENT, MATCH_PARENT).apply { marginStart = 6.dp })
+                    addView(noteBtn("Edit", primary = true) { openNote(n) }, lp(WRAP_CONTENT, MATCH_PARENT).apply { marginStart = 6.dp })
+                }
             }
             addView(FrameLayout(themed).apply {
                 background = ColorDrawable(tokens.key)
@@ -977,7 +1015,7 @@ class PillboardService : InputMethodService() {
                 }
                 clipToOutline = true
                 addView(scroll, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
-                if (n != null) addView(edit, FrameLayout.LayoutParams(WRAP_CONTENT, 40.dp, Gravity.BOTTOM or Gravity.END).apply { setMargins(0, 0, 10.dp, 10.dp) })
+                if (n != null) addView(actions, FrameLayout.LayoutParams(WRAP_CONTENT, 38.dp, Gravity.BOTTOM or Gravity.END).apply { setMargins(0, 0, 10.dp, 10.dp) })
             }, lp(MATCH_PARENT, 0, 1f).apply { setMargins(3.dp, 0, 3.dp, 3.dp) })
         }
     }
@@ -1032,31 +1070,15 @@ class PillboardService : InputMethodService() {
                     setTextColor(tokens.keyText); alpha = 0.5f
                 }, lp(WRAP_CONTENT, WRAP_CONTENT).apply { topMargin = 2.dp })
             }, lp(0, WRAP_CONTENT, 1f))
-            addView(TextView(themed).apply {
-                text = "Insert"; textSize = 13.5f; gravity = Gravity.CENTER
-                setPadding(12.dp, 0, 12.dp, 0); setTextColor(tokens.keyText)
-                background = tokens.stripItemBackground()
-                setOnClickListener {
-                    lastFix = null
-                    currentInputConnection?.commitText(n.body, 1)
-                    afterEdit()
-                    closePanel()
-                }
-            }, lp(WRAP_CONTENT, 36.dp).apply { marginStart = 4.dp })
-            // delete asks twice: the first tap turns the cross into "Delete?" for a moment
-            addView(TextView(themed).apply {
-                text = "\u2715"; textSize = 14f; gravity = Gravity.CENTER; alpha = 0.55f
-                setTextColor(tokens.keyText); contentDescription = "Delete note"
-                minWidth = 44.dp; setPadding(8.dp, 0, 8.dp, 0)
-                setOnClickListener { v ->
-                    val t = v as TextView
-                    if (t.tag == true) { NoteStore.delete(this@PillboardService, n.id); fillNotes(); return@setOnClickListener }
-                    t.tag = true; t.text = "Delete?"; t.textSize = 12.5f; t.alpha = 1f; t.setTextColor(0xFFE5484D.toInt())
-                    t.postDelayed({
-                        if (t.isAttachedToWindow) { t.tag = false; t.text = "\u2715"; t.textSize = 14f; t.alpha = 0.55f; t.setTextColor(tokens.keyText) }
-                    }, 2500L)
-                }
-            }, lp(WRAP_CONTENT, 44.dp))
+            addView(noteBtn("Insert") {
+                lastFix = null
+                currentInputConnection?.commitText(n.body, 1)
+                afterEdit()
+                closePanel()
+            }, lp(WRAP_CONTENT, 34.dp).apply { marginStart = 4.dp })
+            addView(noteBtn("Delete") { t ->
+                confirmDelete(t, "Delete") { NoteStore.delete(this@PillboardService, n.id); fillNotes() }
+            }, lp(WRAP_CONTENT, 34.dp).apply { marginStart = 6.dp; marginEnd = 8.dp })
         }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { setMargins(3.dp, 0, 3.dp, 6.dp) })
     }
 
