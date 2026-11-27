@@ -145,8 +145,8 @@ class KbTokens(ctx0: Context, val theme: KbTheme = KbTheme.current(ctx0)) {
     private val hint = seed ?: c(MR.attr.colorPrimary, 0xFF6750A4.toInt())
     // three-tone: special keys wear the secondary container (a notch darker in light mode so they stay apart from the shell)
     // special keys are the SHELL a step deeper (plus a little of the secondary tone), so they share its hue instead of reading as a different grey
-    private val specialBase = tone(background, Color.BLACK, if (night) 0.22f else 0.09f)
-    val special = ka(p?.special ?: triad?.let { ColorUtils.blendARGB(specialBase, it.sc, 0.25f) }
+    private val specialBase = tone(background, Color.BLACK, if (night) 0.22f else if (frostKeys) 0.16f else 0.09f)
+    val special = kaSpecial(p?.special ?: triad?.let { ColorUtils.blendARGB(specialBase, it.sc, 0.25f) }
         ?: ColorUtils.blendARGB(specialBase, hint, 0.06f))
     val specialText = p?.specialText ?: triad?.onSc ?: keyText
     /** Ink of a special key while pressed. */
@@ -180,6 +180,10 @@ class KbTokens(ctx0: Context, val theme: KbTheme = KbTheme.current(ctx0)) {
         ColorUtils.setAlphaComponent(ColorUtils.blendARGB(c or 0xFF000000.toInt(), target, r), Color.alpha(c))
 
     /** A pressed frosted key firms up (more opaque), like glass pressed against the panel. Opaque colours pass through. */
+    /** Special keys stay firmer than letter keys (alpha at least ~75%), so shift / 123 / space read as keys, not as part of the panel. */
+    private fun kaSpecial(c: Int): Int =
+        if (!frostKeys) ka(c) else ColorUtils.setAlphaComponent(c, maxOf(keyAlpha, 0xC0))
+
     private fun solidify(c: Int): Int =
         if (!frostKeys || Color.alpha(c) >= 0xE0) c else ColorUtils.setAlphaComponent(c, minOf(255, Color.alpha(c) + 0x70))
 
@@ -188,10 +192,7 @@ class KbTokens(ctx0: Context, val theme: KbTheme = KbTheme.current(ctx0)) {
         KeySkin.MECHANICAL -> intArrayOf(lift(base, 0.10f), tone(base, Color.BLACK, 0.04f))
         // clay: a very soft convex pillow, lit from the top-left
         KeySkin.CLAY -> intArrayOf(lift(base, if (night) 0.05f else 0.35f), tone(base, Color.BLACK, if (night) 0.06f else 0.04f))
-        // frosted glass key: a lighter top fading into the body (translucent keys only; Enter / active Shift stay flat)
-        else -> if (frostKeys && Color.alpha(base) < 255)
-            intArrayOf(lift(base, if (night) 0.04f else 0.16f), base)
-        else intArrayOf(base, base)
+        else -> intArrayOf(base, base)
     }
 
     private fun lift(c: Int, r: Float) = ColorUtils.setAlphaComponent(ColorUtils.blendARGB(c or 0xFF000000.toInt(), Color.WHITE, r), Color.alpha(c))
