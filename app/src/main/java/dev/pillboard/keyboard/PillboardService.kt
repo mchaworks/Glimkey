@@ -507,7 +507,7 @@ class PillboardService : InputMethodService() {
         else null
         r.removeAllViews()
         letterKeys.clear(); shiftKey = null; pageKey = null
-        if (panel != Panel.NONE) { strip = null; emojiGrid = null; r.addView(when (panel) { Panel.CLIPBOARD -> buildClipPanel(); Panel.NOTES -> buildNotesPanel(); else -> buildEditPanel() }); return }
+        if (panel != Panel.NONE) { strip = null; emojiGrid = null; r.addView(when (panel) { Panel.CLIPBOARD -> buildClipPanel(); Panel.NOTES -> buildNotesPanel(); Panel.NOTE_VIEW -> buildNoteViewPanel(); else -> buildEditPanel() }); return }
         val keyH = keyHeight()
         val gb = Prefs.gboard(this)
         val numLabel = if (gb) "?123" else "123"
@@ -677,7 +677,7 @@ class PillboardService : InputMethodService() {
 
 
     // ---- panels (clipboard, text editing): the shell's whole content is replaced with Blur Replace ----
-    private enum class Panel { NONE, CLIPBOARD, NOTES, EDIT }
+    private enum class Panel { NONE, CLIPBOARD, NOTES, NOTE_VIEW, EDIT }
     private var panel = Panel.NONE
     private var panelH = 0
     private var swapAnim: android.animation.ValueAnimator? = null
@@ -741,7 +741,7 @@ class PillboardService : InputMethodService() {
     private fun lp(w: Int, h: Int, weight: Float = 0f) = LinearLayout.LayoutParams(w, h, weight)
 
     /** Back arrow, title and an optional text action: the panel's own top bar (same footprint as the suggestion strip). */
-    private fun panelBar(title: String, action: String? = null, onAction: () -> Unit = {}) = LinearLayout(themed).apply {
+    private fun panelBar(title: String, action: String? = null, onBack: () -> Unit = { closePanel() }, onAction: () -> Unit = {}) = LinearLayout(themed).apply {
         orientation = LinearLayout.HORIZONTAL
         isBaselineAligned = false
         layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, 42.dp).apply { setMargins(3.dp, 0, 3.dp, 3.dp) }
@@ -754,7 +754,7 @@ class PillboardService : InputMethodService() {
             setPadding(10.dp, 10.dp, 10.dp, 10.dp); imageAlpha = 220
             contentDescription = "Back"
             background = tokens.stripItemBackground()
-            setOnClickListener { closePanel() }
+            setOnClickListener { onBack() }
         }, lp(46.dp, MATCH_PARENT))
         addView(TextView(themed).apply {
             text = title; textSize = 16f; gravity = Gravity.CENTER_VERTICAL
@@ -769,9 +769,9 @@ class PillboardService : InputMethodService() {
         }, lp(WRAP_CONTENT, MATCH_PARENT))
     }
 
-    // ---- notes: a list panel (read, insert, delete) and an editor that docks above the keys like Translate ----
+    // ---- notes: a list panel, a read-only viewer (Edit opens the editor) and an editor that docks above the keys like Translate ----
     // While a note is open the keyboard's input connection is a NoteConnection: every key, suggestion and editing tool types
-    // into the note instead of the app's field. Notes are saved on the device as you type; Insert puts one into the field.
+    // into the note instead of the app's field. Notes are saved on the device as you type; Save returns to reading the note.
     private var noteMode = false
     private var noteId = 0L
     private var noteBuf: NoteBuffer? = null
@@ -832,16 +832,19 @@ class PillboardService : InputMethodService() {
     /** Opens [n] (or a new note) in the dock: the panel blurs away and the dock arrives with the keys under it. */
     private fun openNote(n: Note?) = swapShell(BlurDir.DOWN) { panel = Panel.NONE; selecting = false; beginNote(n); render() }
 
-    private fun insertNote() {
-        val b = noteBuf ?: return
-        val t = b.text.toString()
-        if (t.isBlank()) return
+    /** Save: stores the note and goes back to reading it (the list if it ended up empty). */
+    private fun finishNote() {
+        trHandler.removeCallbacks(noteSave)
         saveNote()
-        val ic = realConnection() ?: return
-        lastFix = null
-        ic.commitText(t, 1)
-        stopTranslate()
-        afterEdit()
+        val saved = NoteStore.all(this).firstOrNull { it.id == noteId }
+        val r = root ?: return
+        panelH = (r.height - r.paddingTop - r.paddingBottom).coerceAtLeast(180.dp)
+        swapShell(BlurDir.UP) {
+            stopTranslateState()
+            viewNoteId = saved?.id ?: 0L
+            panel = if (saved != null) Panel.NOTE_VIEW else Panel.NOTES
+            render()
+        }
     }
 
     private fun updateNoteDock(saved: Boolean, animate: Boolean = true) {
@@ -853,7 +856,7 @@ class PillboardService : InputMethodService() {
         if (animate) st.setTextBlur(label, minGapMs = BlurTextTokens.RAPID_GAP_MS) else st.text = label
     }
 
-    /** The note editor: ✕, the title, its state, the note list and Insert on top, the note on a key-coloured card below (like the translate dock). */
+    /** The note editor: ✕, the title, its state, the note list and Save on top, the note on a key-coloured card below (like the translate dock). */
     private fun buildNoteDock(): LinearLayout {
         val buf = noteBuf ?: NoteBuffer("")
         val medium = ResourcesCompat.getFont(themed, R.font.gsr_medium)
@@ -889,14 +892,14 @@ class PillboardService : InputMethodService() {
                 swapShell(BlurDir.UP) { stopTranslateState(); panel = Panel.NOTES; render() }
             }
         }
-        val insert = TextView(themed).apply {
-            text = "Insert"; textSize = 14f; gravity = Gravity.CENTER
+        val save = TextView(themed).apply {
+            text = "Save"; textSize = 14f; gravity = Gravity.CENTER
             setPadding(14.dp, 0, 14.dp, 0); setTextColor(tokens.keyText)
             if (medium != null) typeface = medium
             background = tokens.stripItemBackground()
-            setOnClickListener { insertNote() }
+            setOnClickListener { finishNote() }
         }
-        val closeH = holder(close); val allH = holder(all); val insH = holder(insert)
+        val closeH = holder(close); val allH = holder(all); val insH = holder(save)
         val row = LinearLayout(themed).apply {
             orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false
             addView(closeH, LinearLayout.LayoutParams(40.dp, MATCH_PARENT))
@@ -940,6 +943,45 @@ class PillboardService : InputMethodService() {
         return dock
     }
 
+    private var viewNoteId = 0L
+
+    private fun openNoteView(n: Note) = swapShell(BlurDir.UP) { viewNoteId = n.id; panel = Panel.NOTE_VIEW; render() }
+
+    /** Read-only view of one note: back to the list; the Edit button floats inside the note card and opens the editor. */
+    private fun buildNoteViewPanel(): LinearLayout {
+        val n = NoteStore.all(this).firstOrNull { it.id == viewNoteId }
+        val rad = Prefs.keyRadius(this).dp.toFloat()
+        return LinearLayout(themed).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, panelH)
+            addView(panelBar(n?.title ?: "Notes", onBack = { swapShell(BlurDir.DOWN) { panel = Panel.NOTES; render() } }))
+            val body = TextView(themed).apply {
+                text = n?.body ?: ""; textSize = 15.5f
+                setPadding(12.dp, 8.dp, 12.dp, 56.dp); setTextColor(tokens.keyText)
+            }
+            val scroll = android.widget.ScrollView(themed).apply {
+                isVerticalScrollBarEnabled = false; overScrollMode = View.OVER_SCROLL_NEVER
+                addView(body, FrameLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+            }
+            val edit = TextView(themed).apply {
+                text = "Edit"; textSize = 14f; gravity = Gravity.CENTER
+                setPadding(20.dp, 0, 20.dp, 0); setTextColor(tokens.keyText)
+                ResourcesCompat.getFont(themed, R.font.gsr_medium)?.let { typeface = it }
+                background = GradientDrawable().apply { setColor(tokens.pressed); cornerRadius = 20.dp.toFloat() }
+                setOnClickListener { if (n != null) openNote(n) }
+            }
+            addView(FrameLayout(themed).apply {
+                background = ColorDrawable(tokens.key)
+                outlineProvider = object : android.view.ViewOutlineProvider() {
+                    override fun getOutline(v: View, outline: android.graphics.Outline) { outline.setRoundRect(0, 0, v.width, v.height, rad) }
+                }
+                clipToOutline = true
+                addView(scroll, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
+                if (n != null) addView(edit, FrameLayout.LayoutParams(WRAP_CONTENT, 40.dp, Gravity.BOTTOM or Gravity.END).apply { setMargins(0, 0, 10.dp, 10.dp) })
+            }, lp(MATCH_PARENT, 0, 1f).apply { setMargins(3.dp, 0, 3.dp, 3.dp) })
+        }
+    }
+
     private fun buildNotesPanel() = LinearLayout(themed).apply {
         orientation = LinearLayout.VERTICAL
         layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, panelH)
@@ -972,7 +1014,7 @@ class PillboardService : InputMethodService() {
                 addState(intArrayOf(android.R.attr.state_pressed), shape(tokens.pressed))
                 addState(intArrayOf(), shape(tokens.key))
             }
-            setOnClickListener { openNote(n) }
+            setOnClickListener { openNoteView(n) }
             addView(LinearLayout(themed).apply {
                 orientation = LinearLayout.VERTICAL; setPadding(14.dp, 9.dp, 4.dp, 9.dp)
                 addView(TextView(themed).apply {
