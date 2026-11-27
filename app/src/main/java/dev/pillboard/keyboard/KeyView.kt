@@ -474,7 +474,6 @@ class KeyView(
         rest = radiusFor(style)
         restColors = t.sheen(fill)          // cached: no allocation on every release
         shape.skin = t.skin; shape.edge = t.edgeOf(fill); shape.line = t.lineOf(style)
-        shape.rim = if (t.frostKeys && Color.alpha(fill) < 255) t.keyRim else Color.TRANSPARENT     // opaque keys (Enter, active Shift) get no glass rim
         downColors[0] = pressedFill; downColors[1] = pressedFill
         morph?.cancel()
         paint(false)

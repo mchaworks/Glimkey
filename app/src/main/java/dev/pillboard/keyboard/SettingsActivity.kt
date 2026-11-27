@@ -188,7 +188,7 @@ class SettingsActivity : Activity() {
                     onChange = { refreshPreview(); renderBody() })
             },
             Item(Page.LOOK_GLASS, "Glass look", "preset quick frosted clear smooth ios liquid apply blur keys one tap", visible = { KbTheme.current(this).isGlass }) {
-                ui.link("Apply glass look", "Blur on, heavy blur, light tint, frosted glass keys: one tap", chevron = false) {
+                ui.link("Apply glass look", "Blur on, heavy blur, light tint, flat keys like iOS 26: one tap", chevron = false) {
                     Prefs.setBool(this, "blur", true); Prefs.setInt(this, "blur_radius", GlassDefaults.PRESET_RADIUS)
                     Prefs.setInt(this, "blur_tint", GlassDefaults.PRESET_TINT); Prefs.setInt(this, "key_alpha", GlassDefaults.PRESET_KEY_ALPHA)
                     renderBody(animate = true); refreshPreview()
