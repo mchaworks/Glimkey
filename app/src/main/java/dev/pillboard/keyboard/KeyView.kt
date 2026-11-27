@@ -106,6 +106,7 @@ class KeyPreview(private val ctx: Context, private val t: KbTokens) {
     private var fBmp: Bitmap? = null
     private var fCanvas: Canvas? = null
     private var fA = IntArray(0)
+    private var fBuf: java.nio.IntBuffer? = null
     private var fB = IntArray(0)
     private var fDirty = false
     private var fLive = false
@@ -140,61 +141,75 @@ class KeyPreview(private val ctx: Context, private val t: KbTokens) {
                 c = Canvas(bmp)
                 fBmp = bmp; fCanvas = c
                 fA = IntArray(bw * bh); fB = IntArray(bw * bh)
+                fBuf = java.nio.IntBuffer.wrap(fA)
             }
             val rl = IntArray(2); root.getLocationOnScreen(rl)
-            bmp.eraseColor(t.background or 0xFF000000.toInt())          // where the patch sticks out of the window: the shell tone, never black
+            bmp.eraseColor(0)          // transparent: the shell is a translucent tint over the system blur, so what is under it must show through, not a flat base colour
             val save = c.save()
             c.scale(bw.toFloat() / fW, bh.toFloat() / fH)
             c.translate((rl[0] - fLeft).toFloat(), (rl[1] - fTop).toFloat())
             root.draw(c)
             c.restoreToCount(save)
-            bmp.getPixels(fA, 0, bw, 0, 0, bw, bh)
+            // past the keyboard window's edge (a bubble over the top row) there is no shell: cover it with the shell tone so the app does not shine through sharp
+            val sx = bw.toFloat() / fW; val sy = bh.toFloat() / fH
+            val wl = (rl[0] - fLeft) * sx; val wt = (rl[1] - fTop) * sy
+            val wr = wl + root.width * sx; val wb = wt + root.height * sy
+            if (wl > 0f || wt > 0f || wr < bw || wb < bh) {
+                c.save()
+                c.clipOutRect(wl, wt, wr, wb)
+                c.drawColor(ColorUtils.setAlphaComponent(t.background, 0xB8))
+                c.restore()
+            }
+            val buf = fBuf ?: return false
+            buf.rewind(); bmp.copyPixelsToBuffer(buf)          // raw premultiplied pixels: the four channels are blurred alike, so alpha blurs correctly too
             // blur "radius" = sigma in dp (like RenderEffect); a box radius of ~1.14 sigma, two passes, at 1/div size
             val r = Math.round(fBlurDp * ctx.resources.displayMetrics.density / div / 0.88f).coerceIn(0, 6)
             if (r > 0) repeat(2) { boxH(fA, fB, bw, bh, r); boxV(fB, fA, bw, bh, r) }
-            bmp.setPixels(fA, 0, bw, 0, 0, bw, bh)
+            buf.rewind(); bmp.copyPixelsFromBuffer(buf)
             fr.setBackdrop(bmp)
             true
         } catch (_: Throwable) { false }
     }
 
-    /** Horizontal box blur, clamped edges, running sums: O(pixels) whatever the radius. */
+    /** Horizontal box blur over four packed 8-bit channels, clamped edges, running sums: O(pixels) whatever the radius. */
     private fun boxH(s: IntArray, d: IntArray, w: Int, h: Int, r: Int) {
-        val n = 2 * r + 1
+        val n = 2 * r + 1; val hn = n / 2
         for (y in 0 until h) {
             val o = y * w
-            var sr = 0; var sg = 0; var sb = 0
+            var s0 = 0; var s1 = 0; var s2 = 0; var s3 = 0
             for (i in -r..r) {
                 val p = s[o + i.coerceIn(0, w - 1)]
-                sr += (p shr 16) and 255; sg += (p shr 8) and 255; sb += p and 255
+                s0 += p and 255; s1 += (p ushr 8) and 255; s2 += (p ushr 16) and 255; s3 += p ushr 24
             }
             for (x in 0 until w) {
-                d[o + x] = (0xFF shl 24) or ((sr / n) shl 16) or ((sg / n) shl 8) or (sb / n)
+                d[o + x] = ((s0 + hn) / n) or (((s1 + hn) / n) shl 8) or (((s2 + hn) / n) shl 16) or (((s3 + hn) / n) shl 24)
                 val a = s[o + minOf(x + r + 1, w - 1)]
                 val b = s[o + maxOf(x - r, 0)]
-                sr += ((a shr 16) and 255) - ((b shr 16) and 255)
-                sg += ((a shr 8) and 255) - ((b shr 8) and 255)
-                sb += (a and 255) - (b and 255)
+                s0 += (a and 255) - (b and 255)
+                s1 += ((a ushr 8) and 255) - ((b ushr 8) and 255)
+                s2 += ((a ushr 16) and 255) - ((b ushr 16) and 255)
+                s3 += (a ushr 24) - (b ushr 24)
             }
         }
     }
 
     /** Vertical twin of [boxH]. */
     private fun boxV(s: IntArray, d: IntArray, w: Int, h: Int, r: Int) {
-        val n = 2 * r + 1
+        val n = 2 * r + 1; val hn = n / 2
         for (x in 0 until w) {
-            var sr = 0; var sg = 0; var sb = 0
+            var s0 = 0; var s1 = 0; var s2 = 0; var s3 = 0
             for (i in -r..r) {
                 val p = s[i.coerceIn(0, h - 1) * w + x]
-                sr += (p shr 16) and 255; sg += (p shr 8) and 255; sb += p and 255
+                s0 += p and 255; s1 += (p ushr 8) and 255; s2 += (p ushr 16) and 255; s3 += p ushr 24
             }
             for (y in 0 until h) {
-                d[y * w + x] = (0xFF shl 24) or ((sr / n) shl 16) or ((sg / n) shl 8) or (sb / n)
+                d[y * w + x] = ((s0 + hn) / n) or (((s1 + hn) / n) shl 8) or (((s2 + hn) / n) shl 16) or (((s3 + hn) / n) shl 24)
                 val a = s[minOf(y + r + 1, h - 1) * w + x]
                 val b = s[maxOf(y - r, 0) * w + x]
-                sr += ((a shr 16) and 255) - ((b shr 16) and 255)
-                sg += ((a shr 8) and 255) - ((b shr 8) and 255)
-                sb += (a and 255) - (b and 255)
+                s0 += (a and 255) - (b and 255)
+                s1 += ((a ushr 8) and 255) - ((b ushr 8) and 255)
+                s2 += ((a ushr 16) and 255) - ((b ushr 16) and 255)
+                s3 += (a ushr 24) - (b ushr 24)
             }
         }
     }
