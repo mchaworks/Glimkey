@@ -187,6 +187,14 @@ class SettingsActivity : Activity() {
                 ui.toggle("Three-tone accent", "Like Pixel: primary on Enter, secondary on special keys, tertiary on Shift", "tritone", true,
                     onChange = { refreshPreview(); renderBody() })
             },
+            Item(Page.LOOK_GLASS, "Glass look", "preset quick frosted clear smooth ios liquid apply blur keys one tap", visible = { KbTheme.current(this).isGlass }) {
+                ui.link("Apply glass look", "Blur on, wider blur, lighter tint, frosted keys: one tap", chevron = false) {
+                    Prefs.setBool(this, "blur", true); Prefs.setInt(this, "blur_radius", 48)
+                    Prefs.setInt(this, "blur_tint", 45); Prefs.setInt(this, "key_alpha", 72)
+                    renderBody(animate = true); refreshPreview()
+                    android.widget.Toast.makeText(this, "Glass look applied", android.widget.Toast.LENGTH_SHORT).show()
+                }
+            },
             Item(Page.LOOK_GLASS, "Blur background", "frosted glass", visible = { KbTheme.current(this).isGlass }) {
                 ui.toggle("Blur background",
                     if (blurOk) "Liquid Glass backdrop blur" else "Glass tint fallback; system blur unavailable",
@@ -194,6 +202,9 @@ class SettingsActivity : Activity() {
             },
             Item(Page.LOOK_GLASS, "Blur tint", "blur tint opacity transparency glass shell frosted clear see through", visible = { KbTheme.current(this).isGlass }) {
                 ui.slider("Blur tint", 10, 100, "blur_tint", 62, listOf("Clear" to 30, "Standard" to 62, "Frosted" to 85), unit = "%") { refreshPreview() }
+            },
+            Item(Page.LOOK_GLASS, "Blur strength", "blur radius smooth wide soft blotchy patchy sharp heavy", visible = { KbTheme.current(this).isGlass }) {
+                ui.slider("Blur strength", 10, 64, "blur_radius", 40, listOf("Soft" to 24, "Standard" to 40, "Heavy" to 60)) { }
             },
             Item(Page.LOOK_GLASS, "Key opacity", "glass keys keycap transparent translucent see through blur clear frosted solid", visible = { KbTheme.current(this).isGlass }) {
                 ui.slider("Key opacity", 30, 100, "key_alpha", 100, listOf("Clear" to 45, "Frosted" to 70, "Solid" to 100), unit = "%") { refreshPreview() }
@@ -691,7 +702,7 @@ class SettingsActivity : Activity() {
                 "haptic_slide", "sound", "sound_style", "sound_vol"),
             Page.LOOK_THEME to listOf(KbTheme.PREF, "mode"),
             Page.LOOK_COLOR to listOf("preset", "accent_v2", "dynamic", "hue", "accent_style", "tritone"),
-            Page.LOOK_GLASS to listOf("blur", "blur_tint", "key_alpha", "refract", "lens"),
+            Page.LOOK_GLASS to listOf("blur", "blur_tint", "blur_radius", "key_alpha", "refract", "lens"),
             Page.LOOK_KEYS to listOf("keypreview", "key_h", "key_h_land") + KbTheme.values().flatMap { listOf(it.keyRKey, it.keyGapKey) },
             Page.LOOK_FX to listOf(TapEffect.PREF, TapEffect.COLOR_PREF, BackEffect.PREF),
         )

@@ -97,7 +97,8 @@ class KbTokens(ctx0: Context, val theme: KbTheme = KbTheme.current(ctx0)) {
     val fadeOutMs = 70L
     val rowInMs = 140L                 // ?123 <-> ABC page change
     /** Android's window-blur guidance: ~80px reads well, above ~150px costs real performance. */
-    val blurRadius = minOf(28.dp, 110)
+    /** Settings > Glass & blur > Blur strength. A wider blur melts the app behind into smooth colour instead of grey blotches (guidance caps it near 200px). */
+    val blurRadius = minOf(Prefs.int(ctx, "blur_radius", 40).coerceIn(10, 64).dp, 220)
 
     // ---- color: glass belongs to the shell, keycaps stay solid tonal surfaces ----
     // Light theme: shell sits a notch darker so white keycaps separate from it (validated contrast ~1.24:1).
