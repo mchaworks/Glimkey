@@ -69,6 +69,8 @@ private fun morphFromKey(face: View, lens: LensView?, bw: Int, bh: Int, kw: Int,
  * One reusable floating character preview per keyboard (never one window per key).
  * Shown after the key has already been committed, so it can never delay typing.
  */
+@Volatile internal var frostCapturing = false
+
 class KeyPreview(private val ctx: Context, private val t: KbTokens) {
     private val motionOn = animationsOn(ctx)
     private val bubble = TextView(ctx).apply {
@@ -148,7 +150,8 @@ class KeyPreview(private val ctx: Context, private val t: KbTokens) {
             val save = c.save()
             c.scale(bw.toFloat() / fW, bh.toFloat() / fH)
             c.translate((rl[0] - fLeft).toFloat(), (rl[1] - fTop).toFloat())
-            root.draw(c)
+            frostCapturing = true
+            try { root.draw(c) } finally { frostCapturing = false }
             c.restoreToCount(save)
             // past the keyboard window's edge (a bubble over the top row) there is no shell: cover it with the shell tone so the app does not shine through sharp
             val sx = bw.toFloat() / fW; val sy = bh.toFloat() / fH
@@ -838,6 +841,7 @@ class KeyView(
     }
 
     override fun onDraw(canvas: Canvas) {
+        if (frostCapturing) return
         // skins that move (paper card, mechanical cap) carry the label with the face
         val sv = canvas.save()
         canvas.translate(0f, shape.contentDy)
