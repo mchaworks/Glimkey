@@ -11,6 +11,9 @@ import android.view.View
 
 /** A kind beyond the system's own constants: the finger lifting off a key. */
 const val HAPTIC_RELEASE = 9001
+/** A press of the primary action key (return / send) and of a modifier or space key: kinds beyond the system's constants. */
+const val HAPTIC_ACCENT = 9002
+const val HAPTIC_SPECIAL = 9003
 
 /** The feel of a key press (Settings > Feedback > Haptic style). */
 enum class HapticStyle(val id: String, val label: String) {
@@ -38,6 +41,7 @@ internal object Haptics {
     private const val TICK = 2
     private const val RELEASE = 3
 
+    private var lastPlay = 0L
     private var vib: Vibrator? = null
     private var cacheKey = -1
     private val cache = arrayOfNulls<VibrationEffect>(4)
@@ -56,6 +60,8 @@ internal object Haptics {
         HapticFeedbackConstants.LONG_PRESS -> LONG
         HapticFeedbackConstants.CLOCK_TICK -> TICK
         HAPTIC_RELEASE -> RELEASE
+        HAPTIC_ACCENT -> LONG       // advanced engine: share the firm slot
+        HAPTIC_SPECIAL -> TICK      // advanced engine: share the light slot
         else -> TAP
     }
 
@@ -64,6 +70,17 @@ internal object Haptics {
     fun play(c: Context, kind: Int = HapticFeedbackConstants.KEYBOARD_TAP, v: View? = null) {
         if (!Prefs.bool(c, "haptic", true)) return
         if (kind == HAPTIC_RELEASE && !Prefs.bool(c, "haptic_release", true)) return
+        var kind = kind
+        if (kind == HAPTIC_ACCENT || kind == HAPTIC_SPECIAL) {
+            if (!Prefs.bool(c, "haptic_keytype", true)) kind = HapticFeedbackConstants.KEYBOARD_TAP
+        }
+        // Adaptive: a tap right behind another is the middle of fast typing: keep it light, and never closer than a motor can resolve.
+        val now = android.os.SystemClock.uptimeMillis()
+        val gap = now - lastPlay
+        lastPlay = now
+        if (kind != HAPTIC_RELEASE && gap in 0..12) return
+        if (Prefs.bool(c, "haptic_adaptive", true) && gap in 0..70 &&
+            (kind == HapticFeedbackConstants.KEYBOARD_TAP || kind == HAPTIC_ACCENT || kind == HAPTIC_SPECIAL)) kind = HapticFeedbackConstants.CLOCK_TICK
         val strength = Prefs.int(c, "haptic_strength", 85).coerceIn(5, 100)
         val style = HapticStyle.of(Prefs.str(c, "haptic_style", "crisp"))
         val vb = vibrator(c)
@@ -83,13 +100,13 @@ internal object Haptics {
             try { vb.vibrate(effect) } catch (t: Exception) { android.util.Log.w("Haptics", "advanced failed", t); fallback(vb, kind) }
             return
         }
-        if (kind != HAPTIC_RELEASE) v?.performHapticFeedback(kind, HapticFeedbackConstants.FLAG_IGNORE_GLOBAL_SETTING)
+        if (kind != HAPTIC_RELEASE) v?.performHapticFeedback(if (kind >= 9000) HapticFeedbackConstants.KEYBOARD_TAP else kind, HapticFeedbackConstants.FLAG_IGNORE_GLOBAL_SETTING)
     }
 
     private fun predefined(vb: Vibrator, kind: Int, style: HapticStyle) {
         val e = when (kind) {
-            HapticFeedbackConstants.LONG_PRESS -> VibrationEffect.EFFECT_HEAVY_CLICK
-            HapticFeedbackConstants.CLOCK_TICK, HAPTIC_RELEASE -> VibrationEffect.EFFECT_TICK
+            HapticFeedbackConstants.LONG_PRESS, HAPTIC_ACCENT -> VibrationEffect.EFFECT_HEAVY_CLICK
+            HapticFeedbackConstants.CLOCK_TICK, HAPTIC_RELEASE, HAPTIC_SPECIAL -> VibrationEffect.EFFECT_TICK
             else -> when (style) {
                 HapticStyle.SOFT -> VibrationEffect.EFFECT_TICK
                 HapticStyle.HEAVY -> VibrationEffect.EFFECT_HEAVY_CLICK

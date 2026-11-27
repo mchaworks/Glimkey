@@ -301,6 +301,7 @@ class PillboardService : InputMethodService() {
         stopTranslateState()
         Suggestions.save()
         super.onFinishInputView(finishingInput)
+        TypingStats.flush(this)
         KbMode.appNight = null   // the Settings app shares this process: it must not inherit a terminal's dark
     }
 
@@ -475,6 +476,8 @@ class PillboardService : InputMethodService() {
         val gb = Prefs.gboard(this)
         val numLabel = if (gb) "?123" else "123"
 
+        val field = fieldKind()
+        val numpad = field == Field.NUMBER && !emojiMode
         val grid = emojiMode && !emojiSearch
         emojiGrid = null
         strip = when {
@@ -487,6 +490,16 @@ class PillboardService : InputMethodService() {
 
         if (grid) {
             r.addView(buildEmojiGrid(keyH))
+        } else if (numpad) {
+            for (digits in listOf("123", "456", "789")) r.addView(rowOf { gap(1f); chars(digits, keyH); gap(1f) })
+            r.addView(rowOf {
+                gap(1f)
+                val side = numpadSide()
+                key(side, keyH, 1f, KeyStyle.SPECIAL) { type(side) }
+                chars("0", keyH)
+                key("Backspace", keyH, 1f, KeyStyle.SPECIAL, repeat = true, icon = R.drawable.ic_backspace) { backspace() }
+                gap(1f)
+            })
         } else if (!symbols) {
             if (Prefs.bool(this, "numrow", false)) r.addView(rowOf { chars("1234567890", (keyH * 0.8f).toInt()) })
             r.addView(rowOf { chars("qwertyuiop", keyH) })
@@ -533,7 +546,11 @@ class PillboardService : InputMethodService() {
                 key("Backspace", keyH, 1.5f, KeyStyle.SPECIAL, repeat = true, icon = R.drawable.ic_backspace) { backspace() }
             })
         }
-        if (grid) r.addView(emojiBottomRow(keyH)) else r.addView(rowOf {
+        if (grid) r.addView(emojiBottomRow(keyH)) else if (numpad) r.addView(rowOf {
+            gap(0.4f)
+            key(actionName(), keyH, 3.2f, KeyStyle.ACCENT) { enter() }
+            gap(0.4f)
+        }) else r.addView(rowOf {
             pageKey = key(if (symbols) "ABC" else numLabel, keyH, 1.35f, KeyStyle.SPECIAL) {
                 // snapshot first: render() rebuilds the row, and a transition still running on the old key carries over
                 val from = if (symbols) "ABC" else numLabel
@@ -547,7 +564,15 @@ class PillboardService : InputMethodService() {
             }
             val emojiBeside = emojiBesideComma()
             if (emojiBeside && !gb) key("Emoji", keyH, 0.85f, KeyStyle.SPECIAL, icon = R.drawable.ic_emoji) { setEmoji(true) }
-            key(",", keyH, 0.85f, KeyStyle.SPECIAL) { type(",") }
+            when (field) {
+                Field.EMAIL -> key("@", keyH, 0.85f, KeyStyle.SPECIAL) { type("@") }.also { k ->
+                    k.altsFor = { listOf("@gmail.com", "@yahoo.com", "@outlook.com", ",") }; k.onAlt = { type(it) }
+                }
+                Field.URL -> key("/", keyH, 0.85f, KeyStyle.SPECIAL) { type("/") }.also { k ->
+                    k.altsFor = { listOf("https://", "www.", "://", ",") }; k.onAlt = { type(it) }
+                }
+                else -> key(",", keyH, 0.85f, KeyStyle.SPECIAL) { type(",") }
+            }
             if (emojiBeside && gb) key("Emoji", keyH, 0.85f, KeyStyle.SPECIAL, icon = R.drawable.ic_emoji) { setEmoji(true) }
             key("space", keyH, if (emojiBeside) 3.6f else 4.45f, KeyStyle.SPECIAL) { space() }.also { sp ->
                 if (Prefs.bool(this@PillboardService, "spaceslide", true)) {
@@ -559,7 +584,11 @@ class PillboardService : InputMethodService() {
                     sp.onSlideMove = { x -> loupe?.follow(x) }
                 }
             }
-            key(".", keyH, 0.85f, KeyStyle.SPECIAL) { type(".") }
+            key(".", keyH, 0.85f, KeyStyle.SPECIAL) { type(".") }.also { k ->
+                if (field == Field.EMAIL || field == Field.URL) {
+                    k.altsFor = { listOf(".com", ".id", ".co.id", ".net", ".org") }; k.onAlt = { type(it) }
+                }
+            }
             val action = currentInputEditorInfo?.imeOptions?.and(EditorInfo.IME_MASK_ACTION) ?: 0
             // iOS: the action key is a word, not an icon ("return" in lowercase, the editor actions capitalised)
             val name = when (action) {
@@ -1821,6 +1850,37 @@ class PillboardService : InputMethodService() {
         else -> "return"
     }
 
+    /** What the focused field wants, so the keys can follow: numbers get a numpad, e-mail and URL fields get their own keys. */
+    private enum class Field { TEXT, NUMBER, EMAIL, URL }
+
+    private fun fieldKind(): Field {
+        if (!Prefs.bool(this, "fieldaware", true)) return Field.TEXT
+        val t = currentInputEditorInfo?.inputType ?: return Field.TEXT
+        return when (t and InputType.TYPE_MASK_CLASS) {
+            InputType.TYPE_CLASS_NUMBER, InputType.TYPE_CLASS_PHONE, InputType.TYPE_CLASS_DATETIME -> Field.NUMBER
+            InputType.TYPE_CLASS_TEXT -> when (t and InputType.TYPE_MASK_VARIATION) {
+                InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS, InputType.TYPE_TEXT_VARIATION_WEB_EMAIL_ADDRESS -> Field.EMAIL
+                InputType.TYPE_TEXT_VARIATION_URI -> Field.URL
+                else -> Field.TEXT
+            }
+            else -> Field.TEXT
+        }
+    }
+
+    /** The character left of the 0 on a numpad: what the field can use besides digits. */
+    private fun numpadSide(): String {
+        val t = currentInputEditorInfo?.inputType ?: return ","
+        return when (t and InputType.TYPE_MASK_CLASS) {
+            InputType.TYPE_CLASS_PHONE -> "+"
+            InputType.TYPE_CLASS_DATETIME -> if (t and InputType.TYPE_MASK_VARIATION == InputType.TYPE_DATETIME_VARIATION_TIME) ":" else "/"
+            else -> when {
+                t and InputType.TYPE_NUMBER_FLAG_DECIMAL != 0 -> "."
+                t and InputType.TYPE_NUMBER_FLAG_SIGNED != 0 -> "-"
+                else -> ","
+            }
+        }
+    }
+
     private fun emojiBesideComma() = Prefs.bool(this, "emoji", true) && (Prefs.gboard(this) || Prefs.str(this, "emoji_pos", "capsule") == "comma")
 
     /** The "#+=" key and its "123" counterpart: flip between the 123 page and the third page of everyday symbols. */
@@ -2381,12 +2441,15 @@ class PillboardService : InputMethodService() {
         l.update(b, a)
     }
 
+    private fun statsOn() = Prefs.bool(this, TypingStats.PREF, true) && !emojiSearch && learningAllowed()
+
     private fun type(s: String) {
         if (emojiSearch) { query.append(s.lowercase()); updateSearchBar(); return }
         lastFix = null
         // punctuation ends a word: learn it before the mark goes in
         if (s.length == 1 && !s[0].isLetterOrDigit() && s[0] != '\'' && s[0] != '’' &&
             currentInputConnection?.let { !midWord(it) } != false) learnWord(suggestionCtx())
+        if (statsOn()) TypingStats.key(this, s)
         currentInputConnection?.commitText(s, 1)
         afterEdit(letterTyped = s.length == 1 && s[0].isLetterOrDigit())
     }
@@ -2401,6 +2464,7 @@ class PillboardService : InputMethodService() {
             if (learningAllowed()) Suggestions.undoCorrection(fix.first)    // their spelling wins from now on
             afterEdit(); return
         }
+        if (statsOn()) TypingStats.delete(this)
         sendDownUpKeyEvents(KeyEvent.KEYCODE_DEL)
         afterEdit()
     }
@@ -2411,6 +2475,10 @@ class PillboardService : InputMethodService() {
         val ic = currentInputConnection ?: return
         val c = suggestionCtx()
         val mid = midWord(ic)
+        if (statsOn()) {
+            if (ic.getTextBeforeCursor(1, 0)?.lastOrNull()?.isLetterOrDigit() == true) TypingStats.word(this)
+            TypingStats.key(this, " ")
+        }
         if (!mid && Prefs.bool(this, "autocorrect", true) && rewriteAllowed() && autoCorrect(ic, c)) { afterEdit(); return }
         if (!mid) learnWord(c)
         lastFix = null

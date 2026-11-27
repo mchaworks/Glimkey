@@ -100,6 +100,12 @@ class SettingsActivity : Activity() {
             Item(Page.TYPING, "Learn from typing", "learn personalize words adaptive memory privacy") {
                 ui.toggle("Learn from typing", "Remembers your words and word pairs on this device only. Never in password, email, web address or incognito fields.", "learn", true)
             },
+            Item(Page.TYPING, "Typing stats", "statistics speed wpm words keys accuracy counter") {
+                ui.link("Typing stats", "Speed, keys and words. Counts only, never your text", chevron = false) { showTypingStats() }
+            },
+            Item(Page.TYPING, "Collect typing stats", "statistics speed wpm counter privacy off") {
+                ui.toggle("Collect typing stats", "Count keys, words and speed. Never the text, never in password fields", TypingStats.PREF, true)
+            },
             Item(Page.TYPING, "Auto-capitalization", "capital sentence shift") { ui.toggle("Auto-capitalization", "Capital letter at the start of sentences", "autocap", true) },
             Item(Page.TYPING, "Double-space period", "dot full stop") { ui.toggle("Double-space period", "Tap space twice to insert a period", "dblspace", true) },
             Item(Page.TYPING, "Auto-correction", "fix typos undo") { ui.toggle("Auto-correction", "Fix common typos on space, backspace undoes", "autocorrect", true) },
@@ -122,6 +128,9 @@ class SettingsActivity : Activity() {
             },
             Item(Page.LAYOUT, "Layout style", "layout gboard ios style symbols bottom row enter emoji comma google apple") {
                 ui.cycle("Layout style", "layout_style", "ios", listOf("ios" to "iOS", "gboard" to "Gboard")) { refreshPreview(); renderBody() }
+            },
+            Item(Page.LAYOUT, "Smart keys", "field numpad number phone email url web at slash dot com adapt") {
+                ui.toggle("Smart keys", "Numpad in number fields, @ in e-mail fields, / and .com in web fields", "fieldaware", true)
             },
             Item(Page.LAYOUT, "Number row", "digits numbers top") { ui.toggle("Number row", "Show 1–0 above the letters", "numrow", false) },
             Item(Page.LAYOUT, "Key hints", "hint symbol long press hold gboard number punctuation top right") {
@@ -191,6 +200,12 @@ class SettingsActivity : Activity() {
             },
             Item(Page.FEEDBACK, "Haptic test", "vibration haptic test diagnose debug no vibration not working") {
                 ui.link("Haptic test", "Try each vibration method and see which one your phone feels", chevron = false) { HapticLab.show(this) }
+            },
+            Item(Page.FEEDBACK, "Haptic per key", "vibration haptic key type return space shift backspace firm light", visible = { Prefs.bool(this, "haptic", true) }) {
+                ui.toggle("Haptic per key", "Return feels firmer; shift, 123, space and backspace feel lighter", "haptic_keytype", true) { Haptics.play(this, HAPTIC_ACCENT) }
+            },
+            Item(Page.FEEDBACK, "Adaptive haptics", "vibration haptic fast typing speed buzz lighter adaptive", visible = { Prefs.bool(this, "haptic", true) }) {
+                ui.toggle("Adaptive haptics", "Lighter taps while you type fast, so it never turns into a buzz", "haptic_adaptive", true)
             },
             Item(Page.FEEDBACK, "Release tick", "vibration haptic release lift finger up tick", visible = { Prefs.bool(this, "haptic", true) }) {
                 ui.toggle("Release tick", "A faint tick when you lift your finger off a key", "haptic_release", true) { if (it) Haptics.play(this, HAPTIC_RELEASE) }
@@ -543,6 +558,14 @@ class SettingsActivity : Activity() {
         body.addView(ui.section("More"))
         body.addView(ui.box(listOf(Page.ADVANCED, Page.ABOUT)
             .map { p -> pageLink(p) }, inset = ui.tileInset), ui.lp())
+    }
+
+    private fun showTypingStats() {
+        val tv = android.widget.TextView(this).apply { text = TypingStats.report(this@SettingsActivity); textSize = 15f; setPadding(64, 32, 64, 8); setTextColor(ui.onSurface) }
+        MaterialAlertDialogBuilder(this).setTitle("Typing stats").setView(tv)
+            .setPositiveButton("Close", null)
+            .setNegativeButton("Reset") { _, _ -> TypingStats.reset(this) }
+            .show().also { tintDialog(it) }
     }
 
     private fun targetCode() = Prefs.str(this, "tr_target", "").ifEmpty { Languages.defaultTarget(this) }

@@ -320,6 +320,11 @@ class KeyView(
 ) : BlurTextView(context) {
 
     private val soundLabel = label
+    private val pressKind = when (style) {
+        KeyStyle.ACCENT -> HAPTIC_ACCENT          // return / send: a firmer click
+        KeyStyle.SPECIAL -> HAPTIC_SPECIAL        // shift, 123, space, backspace: lighter than a letter
+        else -> HapticFeedbackConstants.KEYBOARD_TAP
+    }
 
     /** Returns long-press alternates for the key's current label (empty = none). */
     var altsFor: ((String) -> List<String>)? = null
@@ -805,7 +810,7 @@ class KeyView(
                 if (pendingUp) pendingKey = java.lang.ref.WeakReference(this)
                 // 2) then feedback
                 animateTo(true, e.x, e.y)
-                keyHaptic(HapticFeedbackConstants.KEYBOARD_TAP)
+                keyHaptic(pressKind)
                 keySound(soundLabel)
                 tapFxBack?.burst(this, e.x, e.y)
                 tapFx?.burst(this, e.x, e.y)
