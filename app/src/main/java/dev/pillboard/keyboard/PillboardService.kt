@@ -168,7 +168,7 @@ class PillboardService : InputMethodService() {
         builtStyle = Prefs.accentStyle(this)
         builtTint = Prefs.int(this, "blur_tint", 62)
         builtKeyAlpha = Prefs.int(this, "key_alpha", 100)
-        builtBlurRad = Prefs.int(this, "blur_radius", 40)
+        builtBlurRad = Prefs.int(this, "blur_radius", GlassDefaults.BLUR_RADIUS)
         shell = null
         lastBlurRadius = -1; maskDrawable = null; maskGlass = null; maskHost = null     // a new input view: everything is applied afresh
         blurAnim?.cancel(); blurK = 1f; fillK = 0f
@@ -265,7 +265,7 @@ class PillboardService : InputMethodService() {
         KbMode.appNight = KbMode.forApp(info?.packageName)
         applyPadding()      // Settings > Layout > Bottom spacing
         val rebuild = KbMode.night(this) != builtNight || Prefs.dynamic(this) != builtDynamic || Prefs.seedColor(this) != builtSeed || BackEffect.pressGlow(this) != builtFx || KbTheme.current(this) != builtTheme ||
-            KbMode.pref(this) != builtMode || Prefs.bool(this, "tritone", true) != builtTri || Prefs.accentStyle(this) != builtStyle || Prefs.int(this, "blur_tint", 62) != builtTint || Prefs.int(this, "key_alpha", 100) != builtKeyAlpha || Prefs.int(this, "blur_radius", 40) != builtBlurRad
+            KbMode.pref(this) != builtMode || Prefs.bool(this, "tritone", true) != builtTri || Prefs.accentStyle(this) != builtStyle || Prefs.int(this, "blur_tint", 62) != builtTint || Prefs.int(this, "key_alpha", 100) != builtKeyAlpha || Prefs.int(this, "blur_radius", GlassDefaults.BLUR_RADIUS) != builtBlurRad
         // The app restarted input on the SAME field (many apps do when the field is cleared or the send button changes):
         // nothing about the field changed, so keep the keyboard as it is. Rebuilding every key and re-applying the window
         // blur here made the keyboard flash and resize the app (the chat jumping up and down) each time.

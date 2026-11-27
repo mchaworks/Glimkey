@@ -48,6 +48,12 @@ internal class KeyBodyDrawable : Drawable() {
     /** Paper / terminal: border. Mechanical: rim light on the cap. */
     var line = Color.TRANSPARENT
         set(v) { if (field != v) { field = v; invalidateSelf() } }
+    /** Frosted glass key: rim light colour (bright at the top-left edge, fading toward the bottom-right). Transparent = no rim. */
+    var rim = Color.TRANSPARENT
+        set(v) { if (field != v) { field = v; rimShaderFor = 0L; invalidateSelf() } }
+    private val rimPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
+    private var rimShaderFor = 0L
+
     /** Skins that physically move (paper card, mechanical cap) look different while pressed. */
     var down = false
         set(v) { if (field != v) { field = v; invalidateSelf() } }
@@ -106,6 +112,22 @@ internal class KeyBodyDrawable : Drawable() {
             path.addRoundRect(rect, radii, Path.Direction.CW)
         } else organic(rect, minOf(radii[0], maxR), minOf(radii[2], maxR), minOf(radii[4], maxR), minOf(radii[6], maxR), bulge)
         canvas.drawPath(path, paint)
+        if (Color.alpha(rim) > 0 && Color.alpha(c0) < 255) drawRim(canvas)
+    }
+
+    /** 1dp gradient hairline along the key's own outline: the glass edge catching light. Reuses [path] as just drawn. */
+    private fun drawRim(canvas: Canvas) {
+        val k = rim.toLong() * 31 + rect.left.toBits() * 7L + rect.top.toBits() * 13L + rect.right.toBits() + rect.bottom.toBits() * 3L
+        if (k != rimShaderFor) {
+            rimShaderFor = k
+            val faint = Color.argb(Color.alpha(rim) / 4, Color.red(rim), Color.green(rim), Color.blue(rim))
+            rimPaint.shader = LinearGradient(rect.left, rect.top, rect.right, rect.bottom,
+                intArrayOf(rim, Color.argb(0, Color.red(rim), Color.green(rim), Color.blue(rim)), faint),
+                floatArrayOf(0f, 0.55f, 1f), Shader.TileMode.CLAMP)
+        }
+        rimPaint.strokeWidth = dens
+        rimPaint.alpha = alphaMul
+        canvas.drawPath(path, rimPaint)
     }
 
     private fun roundPath(r: RectF, shrink: Float = 0f) {

@@ -188,9 +188,9 @@ class SettingsActivity : Activity() {
                     onChange = { refreshPreview(); renderBody() })
             },
             Item(Page.LOOK_GLASS, "Glass look", "preset quick frosted clear smooth ios liquid apply blur keys one tap", visible = { KbTheme.current(this).isGlass }) {
-                ui.link("Apply glass look", "Blur on, wider blur, lighter tint, frosted keys: one tap", chevron = false) {
-                    Prefs.setBool(this, "blur", true); Prefs.setInt(this, "blur_radius", 48)
-                    Prefs.setInt(this, "blur_tint", 45); Prefs.setInt(this, "key_alpha", 72)
+                ui.link("Apply glass look", "Blur on, heavy blur, light tint, frosted glass keys: one tap", chevron = false) {
+                    Prefs.setBool(this, "blur", true); Prefs.setInt(this, "blur_radius", GlassDefaults.PRESET_RADIUS)
+                    Prefs.setInt(this, "blur_tint", GlassDefaults.PRESET_TINT); Prefs.setInt(this, "key_alpha", GlassDefaults.PRESET_KEY_ALPHA)
                     renderBody(animate = true); refreshPreview()
                     android.widget.Toast.makeText(this, "Glass look applied", android.widget.Toast.LENGTH_SHORT).show()
                 }
@@ -204,7 +204,7 @@ class SettingsActivity : Activity() {
                 ui.slider("Blur tint", 10, 100, "blur_tint", 62, listOf("Clear" to 30, "Standard" to 62, "Frosted" to 85), unit = "%") { refreshPreview() }
             },
             Item(Page.LOOK_GLASS, "Blur strength", "blur radius smooth wide soft blotchy patchy sharp heavy", visible = { KbTheme.current(this).isGlass }) {
-                ui.slider("Blur strength", 10, 64, "blur_radius", 40, listOf("Soft" to 24, "Standard" to 40, "Heavy" to 60)) { }
+                ui.slider("Blur strength", 10, 64, "blur_radius", GlassDefaults.BLUR_RADIUS, listOf("Soft" to 24, "Standard" to GlassDefaults.BLUR_RADIUS, "Heavy" to 62)) { }
             },
             Item(Page.LOOK_GLASS, "Key opacity", "glass keys keycap transparent translucent see through blur clear frosted solid", visible = { KbTheme.current(this).isGlass }) {
                 ui.slider("Key opacity", 30, 100, "key_alpha", 100, listOf("Clear" to 45, "Frosted" to 70, "Solid" to 100), unit = "%") { refreshPreview() }

@@ -98,7 +98,7 @@ class KbTokens(ctx0: Context, val theme: KbTheme = KbTheme.current(ctx0)) {
     val rowInMs = 140L                 // ?123 <-> ABC page change
     /** Android's window-blur guidance: ~80px reads well, above ~150px costs real performance. */
     /** Settings > Glass & blur > Blur strength. A wider blur melts the app behind into smooth colour instead of grey blotches (guidance caps it near 200px). */
-    val blurRadius = minOf(Prefs.int(ctx, "blur_radius", 40).coerceIn(10, 64).dp, 220)
+    val blurRadius = minOf(Prefs.int(ctx, "blur_radius", GlassDefaults.BLUR_RADIUS).coerceIn(10, 64).dp, 220)
 
     // ---- color: glass belongs to the shell, keycaps stay solid tonal surfaces ----
     // Light theme: shell sits a notch darker so white keycaps separate from it (validated contrast ~1.24:1).
@@ -117,6 +117,15 @@ class KbTokens(ctx0: Context, val theme: KbTheme = KbTheme.current(ctx0)) {
     /** Liquid Glass keycap opacity (Settings > Appearance > Glass & blur > Key opacity): below 100% the keys are glass too and the blur shows through them. */
     private val keyAlpha = if (isGlass) Prefs.int(ctx, "key_alpha", 100).coerceIn(30, 100) * 255 / 100 else 255
     private fun ka(c: Int) = if (keyAlpha >= 255) c else ColorUtils.setAlphaComponent(c, keyAlpha)
+    /**
+     * Frosted keycaps: a translucent Liquid Glass key reads as its own pane of glass instead of a see-through hole.
+     * The window blur behind the IME is ONE uniform radius (an IME cannot sample or blur the app behind it per view),
+     * so the "second intensity" is faked on the key itself: a lighter top (gloss), and a 1dp rim light. See [sheen],
+     * [keyRim] and KeyBodyDrawable.rim.
+     */
+    val frostKeys = isGlass && skin == KeySkin.FLAT && keyAlpha < 255
+    /** Rim light of a frosted key: bright at the top-left edge, fading out toward the bottom-right. */
+    val keyRim = if (!frostKeys) Color.TRANSPARENT else ColorUtils.setAlphaComponent(Color.WHITE, if (night) 0x55 else 0xC8)
     private val keyBase = p?.key ?: seedTri?.takeIf { night }?.let { ColorUtils.blendARGB(0xFF3C3C42.toInt(), it.pc, 0.20f) } ?: if (night) tone(c(MR.attr.colorSurfaceContainerHighest, 0xFF36343B.toInt()), Color.WHITE, 0.10f)
               else c(MR.attr.colorSurfaceContainerLowest, Color.WHITE)
     val key = ka(keyBase)
@@ -142,10 +151,10 @@ class KbTokens(ctx0: Context, val theme: KbTheme = KbTheme.current(ctx0)) {
     val specialText = p?.specialText ?: triad?.onSc ?: keyText
     /** Ink of a special key while pressed. */
     val pressedSpecialText = p?.pressedText ?: triad?.onSc ?: keyText
-    val pressed = p?.pressed ?: if (night) tone(key, Color.WHITE, 0.16f) else tone(key, Color.BLACK, 0.12f)
+    val pressed = p?.pressed ?: (if (night) tone(key, Color.WHITE, 0.16f) else tone(key, Color.BLACK, 0.12f)).let { solidify(it) }
     val pressedText = p?.pressedText ?: keyText
     /** What a special key turns into while pressed: iOS flips it to the letter-key tone. */
-    val pressedSpecial = p?.pressedSpecial ?: triad?.let { tone(special, if (night) Color.WHITE else Color.BLACK, 0.12f) } ?: key
+    val pressedSpecial = p?.pressedSpecial ?: triad?.let { solidify(tone(special, if (night) Color.WHITE else Color.BLACK, 0.12f)) } ?: solidify(key)
     val accent = p?.accent ?: triad?.p ?: seed ?: c(MR.attr.colorPrimary, Color.BLUE)
     val onAccent = p?.onAccent ?: triad?.onP ?: seed?.let { if (ColorUtils.calculateContrast(Color.WHITE, it) >= 3.0) Color.WHITE else 0xFF10181D.toInt() }
         ?: c(MR.attr.colorOnPrimary, Color.WHITE)
@@ -170,12 +179,19 @@ class KbTokens(ctx0: Context, val theme: KbTheme = KbTheme.current(ctx0)) {
     private fun tone(c: Int, target: Int, r: Float) =
         ColorUtils.setAlphaComponent(ColorUtils.blendARGB(c or 0xFF000000.toInt(), target, r), Color.alpha(c))
 
+    /** A pressed frosted key firms up (more opaque), like glass pressed against the panel. Opaque colours pass through. */
+    private fun solidify(c: Int): Int =
+        if (!frostKeys || Color.alpha(c) >= 0xE0) c else ColorUtils.setAlphaComponent(c, minOf(255, Color.alpha(c) + 0x70))
+
     /** Keycaps are flat solid surfaces (iOS 26); a mechanical cap has a lit top. Always a two-stop array so morphs stay generic. */
     fun sheen(base: Int): IntArray = when (skin) {
         KeySkin.MECHANICAL -> intArrayOf(lift(base, 0.10f), tone(base, Color.BLACK, 0.04f))
         // clay: a very soft convex pillow, lit from the top-left
         KeySkin.CLAY -> intArrayOf(lift(base, if (night) 0.05f else 0.35f), tone(base, Color.BLACK, if (night) 0.06f else 0.04f))
-        else -> intArrayOf(base, base)
+        // frosted glass key: a lighter top fading into the body (translucent keys only; Enter / active Shift stay flat)
+        else -> if (frostKeys && Color.alpha(base) < 255)
+            intArrayOf(lift(base, if (night) 0.10f else 0.60f), base)
+        else intArrayOf(base, base)
     }
 
     private fun lift(c: Int, r: Float) = ColorUtils.setAlphaComponent(ColorUtils.blendARGB(c or 0xFF000000.toInt(), Color.WHITE, r), Color.alpha(c))
@@ -315,4 +331,13 @@ internal class Triad(
             )
         }
     }
+}
+
+/** Defaults of the glass look, shared by the tokens, the service and Settings so they never drift apart. */
+object GlassDefaults {
+    const val BLUR_RADIUS = 52       // wider than before (40): the app behind melts into colour instead of readable ghost text
+    // "Apply glass look" preset
+    const val PRESET_RADIUS = 56
+    const val PRESET_TINT = 42
+    const val PRESET_KEY_ALPHA = 58
 }
