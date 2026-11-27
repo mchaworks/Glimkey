@@ -17,26 +17,60 @@ import android.widget.TextView
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.ColorUtils
 import com.google.android.material.button.MaterialButton
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.color.MaterialColors
 import com.google.android.material.slider.LabelFormatter
 import com.google.android.material.slider.Slider
 import com.google.android.material.R as MR
 
+/** One place for every size in the settings app, so no page picks its own number. */
+internal object Metrics {
+    const val BOX_RADIUS = 26        // inset-grouped card (iOS 26 capsule-like corner)
+    const val FIELD_RADIUS = 18      // theme cards and other fixed-radius things sitting inside a card
+    const val TILE = 32              // leading icon tile
+    const val TILE_RADIUS = 11
+    const val HERO = 48
+    const val ROW_PAD_H = 16
+    const val ROW_PAD_V = 12
+    const val ROW_MIN = 56
+    const val BUTTON_H = 50
+    const val SEARCH_H = 54
+    const val NAV_H = 56
+    const val BACK = 44              // iOS 26 round back button
+    const val PAGE_PAD = 16
+    const val SWITCH_W = 56
+    const val SWITCH_H = 32
+    const val SEGMENT_H = 40
+}
+
 /**
  * Shared design tokens + builders for every settings page, so pages can't drift apart.
- * Look: iOS inset-grouped lists (grey page, white/dark cards, colored icon tiles, large titles, uppercase section
- * labels) with Material 3 Expressive touches (dynamic color, big shapes, a switch whose thumb stretches, a gliding
- * segmented pill). Motion uses the keyboard's smooth ease: no springs.
+ *
+ * Language: iOS 26 on the structure (large title, inset-grouped cards with hairline dividers, capsule controls, glass only
+ * on the floating layer: the back button and the search capsule, never on the lists themselves) and Material 3 Expressive
+ * on the character (dynamic / three-tone colour roles for tiles and controls, big soft shapes, a switch with a check in its
+ * thumb, tonal pills, shape-flowing motion).
+ *
+ * Every row is one of five kinds, so the same affordance always means the same thing:
+ *  - [link]   opens a page            (icon tile, chevron)
+ *  - [value]  opens a picker / editor (current value on the right, chevron)
+ *  - [toggle] switches something      (switch)
+ *  - [action] does something now      (accent coloured title, [destructive] in red)
+ *  - [info]   only shows a value
+ * plus the stacked controls [slider], [segmentRow], [accent] and [themePicker], which share the same title line.
  */
 class SettingsUi(private val a: Activity) {
     // ---- tokens ----
     val night = a.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
-    val boxRadius = 28.dp.toFloat()
-    val rowPad = 16.dp
-    val tileSize = 30.dp
+    val boxRadius = Metrics.BOX_RADIUS.dp.toFloat()
+    val rowPad = Metrics.ROW_PAD_H.dp
+    val tileSize = Metrics.TILE.dp
     /** Divider start for rows that lead with an icon tile (the divider begins under the text, like iOS Settings). */
     val tileInset get() = rowPad + tileSize + 14.dp
     private fun color(attr: Int, fb: Int) = MaterialColors.getColor(a, attr, fb)
+
+    /** A radius for a shape that sits [pad] inside a card, so the corners stay concentric with the card's. */
+    fun concentric(pad: Int) = (boxRadius - pad).coerceAtLeast(8.dp.toFloat())
 
     /**
      * Tonal triad that colours the whole settings app: the wallpaper's Material You palette, or the accent chosen in
@@ -69,27 +103,35 @@ class SettingsUi(private val a: Activity) {
     val onPrimary get() = tri.onP
     val hairline get() = (onSurface and 0x00FFFFFF) or (0x1A shl 24)
     val error get() = color(MR.attr.colorError, Color.RED)
+    private val divider get() = (onSurface and 0x00FFFFFF) or (0x16 shl 24)
     private val switchOff get() = ColorUtils.blendARGB(surface, onSurface, if (night) 0.24f else 0.14f)
     private val segTrack get() = ColorUtils.blendARGB(surface, onSurface, if (night) 0.12f else 0.07f)
     private val segPill get() = if (night) ColorUtils.blendARGB(surface, onSurface, 0.30f) else Color.WHITE
     private val medium: Typeface get() = ResourcesCompat.getFont(a, R.font.gsr_medium) ?: Typeface.create("sans-serif-medium", Typeface.NORMAL)
     private val bold: Typeface get() = ResourcesCompat.getFont(a, R.font.gsr_bold) ?: Typeface.create("sans-serif", Typeface.BOLD)
 
-    fun lp(bottom: Int = 0) = LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = bottom }
-
-    // ---- structure ----
-    /** iOS 26 section label: sentence case, small, grey (iOS 18 shouted in capitals). */
-    fun section(title: String) = TextView(a).apply {
-        text = title; textSize = 13.5f; setTextColor(onSurfaceVar); typeface = medium
-        setPadding(20.dp, 24.dp, 0, 8.dp)
-    }
-
     /** Tint of the real glass (Liquid-Glass-Android) floating controls: the card colour at ~55-60% strength. */
     val glassVeil get() = ColorUtils.setAlphaComponent(surface, if (night) 0x8C else 0xE8)
 
-    /** Floating "Liquid Glass" surface: the card colour, mostly opaque, with a hairline edge. Give the view an elevation for the lift. */
-    fun glassBg(radius: Float) = GradientDrawable().apply {
-        setColor(ColorUtils.setAlphaComponent(surface, if (night) 0xE6 else 0xEC)); cornerRadius = radius; setStroke(1.dp, hairline)
+    fun lp(bottom: Int = 0) = LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = bottom }
+
+    // ---- structure ----
+    /** iOS 26 section label: sentence case, small, grey. */
+    fun section(title: String) = TextView(a).apply {
+        text = title; textSize = 13.5f; setTextColor(onSurfaceVar); typeface = medium
+        setPadding(20.dp, 24.dp, 20.dp, 8.dp)
+    }
+
+    /** The small grey explanation under a card. */
+    fun note(text: String, top: Int = 8.dp) = TextView(a).apply {
+        this.text = text; textSize = 13f; setTextColor(onSurfaceVar); setLineSpacing(0f, 1.1f)
+        setPadding(20.dp, top, 20.dp, 0)
+    }
+
+    /** Nothing to show (no search hits). */
+    fun empty(text: String) = TextView(a).apply {
+        this.text = text; textSize = 15f; setTextColor(onSurfaceVar); gravity = Gravity.CENTER
+        setPadding(24.dp, 56.dp, 24.dp, 24.dp)
     }
 
     /** One rounded card, rows inside, hairline dividers that start at [inset]. */
@@ -97,7 +139,6 @@ class SettingsUi(private val a: Activity) {
         orientation = LinearLayout.VERTICAL
         background = GradientDrawable().apply { setColor(surface); cornerRadius = boxRadius }
         clipToOutline = true
-        val divider = (onSurface and 0x00FFFFFF) or (0x16 shl 24)
         rows.forEachIndexed { i, v ->
             if (i > 0) addView(View(a).apply { setBackgroundColor(divider) },
                 LinearLayout.LayoutParams(-1, 1.dp).apply { marginStart = inset })
@@ -106,14 +147,14 @@ class SettingsUi(private val a: Activity) {
     }
 
     /** A free-form card (status, test field): padded content in the same rounded surface. */
-    fun card(content: View, h: Int = 16.dp, v: Int = 14.dp): View = box(listOf(content.apply { setPadding(h, v, h, v) }))
+    fun card(content: View, h: Int = 16.dp, v: Int = 16.dp): View = box(listOf(content.apply { setPadding(h, v, h, v) }))
 
-    /** Filled = accent pill; otherwise a tinted pill (accent text on a faint accent wash), like iOS. */
+    /** Filled = accent capsule; otherwise a tinted capsule (accent text on a faint accent wash). */
     fun button(label: String, filled: Boolean, compact: Boolean = false, onClick: () -> Unit) = MaterialButton(a).apply {
-        text = label; setTextSize(TypedValue.COMPLEX_UNIT_SP, if (compact) 14f else 15f); isAllCaps = false; typeface = medium
+        text = label; setTextSize(TypedValue.COMPLEX_UNIT_SP, if (compact) 14f else 16f); isAllCaps = false; typeface = medium
         cornerRadius = 100.dp; insetTop = 0; insetBottom = 0; minHeight = 0; minimumHeight = 0; minWidth = 0; minimumWidth = 0
         stateListAnimator = null; elevation = 0f
-        setPadding(if (compact) 16.dp else 18.dp, 0, if (compact) 16.dp else 18.dp, 0)
+        setPadding(if (compact) 16.dp else 20.dp, 0, if (compact) 16.dp else 20.dp, 0)
         backgroundTintList = ColorStateList.valueOf(if (filled) primary else ColorUtils.setAlphaComponent(primary, if (night) 0x38 else 0x24))
         setTextColor(if (filled) onPrimary else primary)
         setOnClickListener { onClick() }
@@ -132,12 +173,26 @@ class SettingsUi(private val a: Activity) {
     fun title(text: String, size: Float = 34f) = TextView(a).apply { this.text = text; textSize = size; setTextColor(onSurface); typeface = bold }
     fun caption(text: String) = TextView(a).apply { this.text = text; textSize = 15f; setTextColor(onSurfaceVar) }
 
+    // ---- dialogs: same card colour and corner as the rest of the app ----
+    fun dialog(title: String): MaterialAlertDialogBuilder = MaterialAlertDialogBuilder(a).setTitle(title)
+        .setBackground(GradientDrawable().apply {
+            setColor(ColorUtils.blendARGB(surface, onSurface, if (night) 0.05f else 0f)); cornerRadius = 28.dp.toFloat()
+        })
+
+    /** Call after show(): buttons wear the accent, the confirming one red when [destructive]. */
+    fun tint(d: androidx.appcompat.app.AlertDialog, destructive: Boolean = false): androidx.appcompat.app.AlertDialog {
+        d.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE)?.setTextColor(if (destructive) error else primary)
+        d.getButton(androidx.appcompat.app.AlertDialog.BUTTON_NEGATIVE)?.setTextColor(primary)
+        d.getButton(androidx.appcompat.app.AlertDialog.BUTTON_NEUTRAL)?.setTextColor(primary)
+        return d
+    }
+
     // ---- rows ----
-    private fun texts(title: String, sub: String?) = LinearLayout(a).apply {
+    private fun texts(title: String, sub: String?, titleColor: Int = onSurface, titleFont: Typeface? = null) = LinearLayout(a).apply {
         orientation = LinearLayout.VERTICAL
-        addView(TextView(a).apply { text = title; textSize = 17f; setTextColor(onSurface) })
+        addView(TextView(a).apply { text = title; textSize = 17f; setTextColor(titleColor); titleFont?.let { typeface = it } })
         if (!sub.isNullOrEmpty()) addView(TextView(a).apply { text = sub; textSize = 13f; setTextColor(onSurfaceVar) },
-            LinearLayout.LayoutParams(-2, -2).apply { topMargin = 1.dp })
+            LinearLayout.LayoutParams(-2, -2).apply { topMargin = 2.dp })
     }
 
     private fun ripple(v: View) {
@@ -147,20 +202,36 @@ class SettingsUi(private val a: Activity) {
 
     private fun row() = LinearLayout(a).apply {
         orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
-        minimumHeight = 56.dp; setPadding(rowPad, 11.dp, rowPad, 11.dp)
+        minimumHeight = Metrics.ROW_MIN.dp; setPadding(rowPad, Metrics.ROW_PAD_V.dp, rowPad, Metrics.ROW_PAD_V.dp)
     }
 
-    /** Settings icon: a rounded square in the accent's secondary container with its "on" colour glyph, so the tiles belong to the hero tile. */
-    @Suppress("UNUSED_PARAMETER")
-    private fun iconTile(icon: Int, bg: Int): View = FrameLayout(a).apply {
-        background = GradientDrawable().apply { setColor(secondaryContainer); cornerRadius = 9.dp.toFloat() }
-        addView(ImageView(a).apply { setImageResource(icon); imageTintList = ColorStateList.valueOf(onSecondaryContainer) },
-            FrameLayout.LayoutParams(19.dp, 19.dp, Gravity.CENTER))
+    /** Stacked controls (slider, segmented, pickers) share this frame so their title line sits where a row's does. */
+    private fun stack() = LinearLayout(a).apply {
+        orientation = LinearLayout.VERTICAL
+        setPadding(rowPad, 14.dp, rowPad, 16.dp)
     }
 
-    /** Slider parts in the accent instead of the theme's baseline purple. */
+    private fun chevron(res: Int = R.drawable.ic_chevron_right) = ImageView(a).apply {
+        setImageResource(res); imageTintList = ColorStateList.valueOf(onSurfaceVar); alpha = 0.55f
+    }
+
+    /**
+     * Settings icon: a rounded square in one of the accent's three tonal containers (primary / secondary / tertiary,
+     * rotated by [tone]) with its matching "on" glyph, so neighbouring rows read apart and still belong to the hero tile.
+     */
+    private fun iconTile(icon: Int, tone: Int): View = FrameLayout(a).apply {
+        val (bg, fg) = when (((tone % 3) + 3) % 3) { 0 -> tri.pc to tri.onPc; 1 -> tri.sc to tri.onSc; else -> tri.tc to tri.onTc }
+        background = GradientDrawable().apply { setColor(bg); cornerRadius = Metrics.TILE_RADIUS.dp.toFloat() }
+        addView(ImageView(a).apply { setImageResource(icon); imageTintList = ColorStateList.valueOf(fg) },
+            FrameLayout.LayoutParams(20.dp, 20.dp, Gravity.CENTER))
+    }
+
+    /** Slider parts in the accent: a white capsule-ish thumb with a hairline and a lift, like the iOS 26 slider. */
     private fun tintSlider(s: Slider) {
-        s.setThumbTintList(ColorStateList.valueOf(primary))
+        s.setThumbTintList(ColorStateList.valueOf(Color.WHITE))
+        s.setThumbStrokeColor(ColorStateList.valueOf(ColorUtils.setAlphaComponent(Color.BLACK, 0x26)))
+        s.setThumbStrokeWidth(1.dp.toFloat())
+        s.setThumbElevation(3.dp.toFloat())
         s.setTrackActiveTintList(ColorStateList.valueOf(primary))
         s.setTrackInactiveTintList(ColorStateList.valueOf(ColorUtils.blendARGB(surface, primary, if (night) 0.30f else 0.22f)))
         s.setHaloTintList(ColorStateList.valueOf(ColorUtils.setAlphaComponent(primary, 0x30)))
@@ -168,70 +239,84 @@ class SettingsUi(private val a: Activity) {
 
     /** Title over a gliding segmented control: for a few options where seeing all of them beats tapping through. */
     fun segmentRow(title: String, key: String, def: String, options: List<Pair<String, String>>, onChange: () -> Unit): View =
-        LinearLayout(a).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(rowPad, 14.dp, rowPad, 14.dp)
+        stack().apply {
             addView(TextView(a).apply { text = title; textSize = 17f; setTextColor(onSurface) })
             addView(Segmented(a, options.map { it.second }, segTrack, segPill, onSurface, onSurfaceVar, medium).apply {
                 select(options.indexOfFirst { it.first == Prefs.str(a, key, def) }, false)
                 onSelect = { i -> Prefs.setStr(a, key, options[i].first); onChange() }
-            }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = 10.dp })
+            }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = 12.dp })
         }
-
-    /** iOS tile body: the colour with a soft light-to-base vertical gradient. */
-    private fun tileBg(c: Int, r: Int) = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
-        intArrayOf(ColorUtils.blendARGB(c, Color.WHITE, 0.2f), c)).apply { cornerRadius = r.toFloat() }
 
     /** Big accent tile for the home status card (Material 3 Expressive: large soft shape, dynamic colour). */
     fun heroTile(icon: Int): View = FrameLayout(a).apply {
-        background = tileBg(primary, 16.dp)
+        background = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
+            intArrayOf(ColorUtils.blendARGB(primary, Color.WHITE, 0.18f), primary)).apply { cornerRadius = 16.dp.toFloat() }
         addView(ImageView(a).apply { setImageResource(icon); imageTintList = ColorStateList.valueOf(onPrimary) },
             FrameLayout.LayoutParams(26.dp, 26.dp, Gravity.CENTER))
     }
 
     fun toggle(title: String, sub: String, key: String, def: Boolean, enabled: Boolean = true, onChange: ((Boolean) -> Unit)? = null): View {
         val r = row()
-        r.addView(texts(title, sub), LinearLayout.LayoutParams(0, -2, 1f).apply { marginEnd = 14.dp })
+        r.addView(texts(title, sub), LinearLayout.LayoutParams(0, -2, 1f).apply { marginEnd = 16.dp })
         val sw = PillSwitch(a, primary, switchOff, Color.WHITE, onPrimary).apply {
             setChecked(enabled && Prefs.bool(a, key, def), false); isEnabled = enabled
             contentDescription = title
             onToggle = { v -> Prefs.setBool(a, key, v); onChange?.invoke(v) }
         }
-        r.addView(sw, LinearLayout.LayoutParams(52.dp, 32.dp))
+        r.addView(sw, LinearLayout.LayoutParams(Metrics.SWITCH_W.dp, Metrics.SWITCH_H.dp))
         if (enabled) { r.setOnClickListener { sw.toggle() }; ripple(r) } else r.alpha = 0.5f
         return r
     }
 
-    /** Navigation / action row. [chevron] false for rows that open a dialog instead of a page. [icon]/[tile] add the colored tile. */
-    /** A row that steps through [options] (value to label) on every tap and shows the current label under the title. */
-    fun cycle(title: String, key: String, def: String, options: List<Pair<String, String>>, onChange: () -> Unit): View = row().apply {
-        val t = texts(title, null)
-        // the current value is a Blur Replace label; full width so the old text keeps its room while it leaves
-        val sub = BlurTextView(a).apply { textSize = 13f; setTextColor(onSurfaceVar) }
-        t.addView(sub, LinearLayout.LayoutParams(-1, -2).apply { topMargin = 1.dp })
-        fun show(animate: Boolean) {
-            val label = options.firstOrNull { it.first == Prefs.str(a, key, def) }?.second ?: options.first().second
-            if (animate) sub.setTextBlur(label) else sub.text = label
+    /**
+     * A choice between [options] (value to label). A few short options show as a segmented control, so every option is in
+     * sight and one tap picks it; more than that opens a list, instead of stepping through the options on every tap.
+     */
+    fun cycle(title: String, key: String, def: String, options: List<Pair<String, String>>, onChange: () -> Unit): View =
+        if (options.size <= 3 && options.all { it.second.length <= 14 }) segmentRow(title, key, def, options, onChange)
+        else choice(title, key, def, options, onChange)
+
+    /** Title, the current choice on the right, and a list dialog. The label Blur-Replaces when it changes. */
+    fun choice(title: String, key: String, def: String, options: List<Pair<String, String>>, onChange: () -> Unit): View = row().apply {
+        fun current() = options.firstOrNull { it.first == Prefs.str(a, key, def) } ?: options.first()
+        val valueView = BlurTextView(a).apply {
+            textSize = 16f; setTextColor(onSurfaceVar); gravity = Gravity.END or Gravity.CENTER_VERTICAL
+            text = current().second
         }
-        show(false)
-        addView(t, LinearLayout.LayoutParams(0, -2, 1f))
-        addView(ImageView(a).apply {
-            setImageResource(R.drawable.ic_swap); imageTintList = ColorStateList.valueOf(onSurfaceVar); alpha = 0.55f
-        }, LinearLayout.LayoutParams(20.dp, 20.dp))
+        addView(TextView(a).apply { text = title; textSize = 17f; setTextColor(onSurface) }, LinearLayout.LayoutParams(-2, -2))
+        addView(valueView, LinearLayout.LayoutParams(0, -2, 1f).apply { marginStart = 12.dp; marginEnd = 6.dp })
+        addView(chevron(R.drawable.ic_unfold), LinearLayout.LayoutParams(20.dp, 20.dp))
         setOnClickListener {
-            val i = options.indexOfFirst { it.first == Prefs.str(a, key, def) }
-            Prefs.setStr(a, key, options[(i + 1) % options.size].first)
-            show(true); onChange()
+            val idx = options.indexOfFirst { it.first == current().first }
+            tint(dialog(title).setSingleChoiceItems(options.map { it.second }.toTypedArray(), idx) { d, i ->
+                Prefs.setStr(a, key, options[i].first); d.dismiss(); valueView.setTextBlur(options[i].second); onChange()
+            }.setNegativeButton("Cancel", null).show())
         }
         ripple(this)
     }
 
-    fun link(title: String, sub: String?, chevron: Boolean = true, icon: Int = 0, tile: Int = 0, onClick: () -> Unit): View = row().apply {
-        if (icon != 0) addView(iconTile(icon, tile), LinearLayout.LayoutParams(tileSize, tileSize).apply { marginEnd = 14.dp })
-        addView(texts(title, sub), LinearLayout.LayoutParams(0, -2, 1f))
-        if (chevron) addView(ImageView(a).apply {
-            setImageResource(R.drawable.ic_chevron_right); imageTintList = ColorStateList.valueOf(onSurfaceVar); alpha = 0.55f
-        }, LinearLayout.LayoutParams(20.dp, 20.dp))
+    /** Opens a page: leading tile (optional), title, sub, chevron. */
+    fun link(title: String, sub: String?, icon: Int = 0, tone: Int = 0, onClick: () -> Unit): View = row().apply {
+        if (icon != 0) addView(iconTile(icon, tone), LinearLayout.LayoutParams(tileSize, tileSize).apply { marginEnd = 14.dp })
+        addView(texts(title, sub), LinearLayout.LayoutParams(0, -2, 1f).apply { marginEnd = 8.dp })
+        addView(chevron(), LinearLayout.LayoutParams(20.dp, 20.dp))
+        setOnClickListener { onClick() }; ripple(this)
+    }
+
+    /** Opens a picker or editor: title, the current value on the right (grey), chevron. */
+    fun value(title: String, value: String, sub: String? = null, onClick: () -> Unit): View = row().apply {
+        addView(texts(title, sub), LinearLayout.LayoutParams(-2, -2))
+        addView(TextView(a).apply {
+            text = value; textSize = 16f; setTextColor(onSurfaceVar); gravity = Gravity.END or Gravity.CENTER_VERTICAL
+            maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END
+        }, LinearLayout.LayoutParams(0, -2, 1f).apply { marginStart = 12.dp; marginEnd = 6.dp })
+        addView(chevron(), LinearLayout.LayoutParams(20.dp, 20.dp))
+        setOnClickListener { onClick() }; ripple(this)
+    }
+
+    /** Does something right now: the title wears the accent (red when [destructive]); no chevron, no value. */
+    fun action(title: String, sub: String? = null, destructive: Boolean = false, onClick: () -> Unit): View = row().apply {
+        addView(texts(title, sub, if (destructive) error else primary, medium), LinearLayout.LayoutParams(0, -2, 1f))
         setOnClickListener { onClick() }; ripple(this)
     }
 
@@ -246,18 +331,16 @@ class SettingsUi(private val a: Activity) {
 
     /** Slider with a live readout, a gliding segmented control for the presets and a small reset shown only when changed. */
     fun slider(title: String, from: Int, to: Int, key: String, def: Int, presets: List<Pair<String, Int>>, unit: String = " dp", onChange: () -> Unit): View =
-        LinearLayout(a).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(rowPad, 14.dp, rowPad, 14.dp)
+        stack().apply {
             // the readout Blur-Replaces as the value changes; a drag faster than RAPID_GAP_MS just snaps (same rule as typing)
             val readout = BlurTextView(a).apply {
-                textSize = 15f; setTextColor(primary); typeface = medium
+                textSize = 16f; setTextColor(primary); typeface = medium
                 gravity = Gravity.END or Gravity.CENTER_VERTICAL; minWidth = 64.dp
             }
             val s = Slider(a).apply {
                 valueFrom = from.toFloat(); valueTo = to.toFloat(); stepSize = 1f
                 isTickVisible = false; labelBehavior = LabelFormatter.LABEL_GONE
-                trackHeight = 10.dp; thumbRadius = 13.dp; haloRadius = 22.dp
+                trackHeight = 12.dp; thumbRadius = 14.dp; haloRadius = 22.dp
                 value = Prefs.int(a, key, def).toFloat().coerceIn(valueFrom, valueTo)
                 tintSlider(this)
             }
@@ -265,7 +348,8 @@ class SettingsUi(private val a: Activity) {
                 onSelect = { i -> s.value = presets[i].second.toFloat() }
             }
             val reset = TextView(a).apply {
-                text = "Reset"; textSize = 14f; setTextColor(primary); setPadding(14.dp, 4.dp, 0, 4.dp)
+                text = "Reset"; textSize = 14f; setTextColor(primary); typeface = medium
+                setPadding(12.dp, 6.dp, 0, 6.dp)
                 setOnClickListener { s.value = def.toFloat() }
             }
             fun show(v: Int, animate: Boolean) {
@@ -281,7 +365,7 @@ class SettingsUi(private val a: Activity) {
                 addView(TextView(a).apply { text = title; textSize = 17f; setTextColor(onSurface) }, LinearLayout.LayoutParams(0, -2, 1f))
                 addView(readout); addView(reset)
             })
-            addView(s, LinearLayout.LayoutParams(-1, -2).apply { topMargin = 4.dp; bottomMargin = 6.dp })
+            addView(s, LinearLayout.LayoutParams(-1, -2).apply { topMargin = 6.dp; bottomMargin = 8.dp })
             addView(seg, LinearLayout.LayoutParams(-1, -2))
         }
 
@@ -292,11 +376,11 @@ class SettingsUi(private val a: Activity) {
      * refreshes the preview while a hue is being dragged).
      */
     fun accent(onChange: () -> Unit): View {
-        val root = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL; setPadding(rowPad, 14.dp, rowPad, 16.dp) }
+        val root = stack()
         root.addView(TextView(a).apply { text = "Accent color"; textSize = 17f; setTextColor(onSurface) })
         val caption = TextView(a).apply { textSize = 13f; setTextColor(onSurfaceVar) }
-        root.addView(caption, LinearLayout.LayoutParams(-2, -2).apply { topMargin = 1.dp })
-        val grid = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL; setPadding(0, 12.dp, 0, 0) }
+        root.addView(caption, LinearLayout.LayoutParams(-2, -2).apply { topMargin = 2.dp })
+        val grid = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL; setPadding(0, 14.dp, 0, 0) }
         root.addView(grid)
 
         val dark = KbMode.night(a)
@@ -349,7 +433,7 @@ class SettingsUi(private val a: Activity) {
 
         if (!isDyn) {
             root.addView(TextView(a).apply { text = "Palette style"; textSize = 13f; setTextColor(onSurfaceVar) },
-                LinearLayout.LayoutParams(-2, -2).apply { topMargin = 14.dp; bottomMargin = 8.dp })
+                LinearLayout.LayoutParams(-2, -2).apply { topMargin = 16.dp; bottomMargin = 8.dp })
             val styles = AccentStyle.values().toList()
             root.addView(Segmented(a, styles.map { it.label }, segTrack, segPill, onSurface, onSurfaceVar, medium).apply {
                 select(styles.indexOf(style), false)
@@ -357,10 +441,10 @@ class SettingsUi(private val a: Activity) {
             }, LinearLayout.LayoutParams(-1, -2))
             if (Prefs.preset(a) == Prefs.CUSTOM) {
                 root.addView(TextView(a).apply { text = "Hue"; textSize = 13f; setTextColor(onSurfaceVar) },
-                    LinearLayout.LayoutParams(-2, -2).apply { topMargin = 14.dp })
+                    LinearLayout.LayoutParams(-2, -2).apply { topMargin = 16.dp })
                 val hue = Slider(a).apply {
                     valueFrom = 0f; valueTo = 359f; stepSize = 1f; isTickVisible = false
-                    labelBehavior = LabelFormatter.LABEL_GONE; trackHeight = 10.dp; thumbRadius = 13.dp; haloRadius = 22.dp
+                    labelBehavior = LabelFormatter.LABEL_GONE; trackHeight = 12.dp; thumbRadius = 14.dp; haloRadius = 22.dp
                     value = Prefs.hue(a).toFloat()
                     tintSlider(this)
                     addOnChangeListener { _, v, _ -> Prefs.setInt(a, "hue", v.toInt()); refresh(); onChange() }
@@ -376,33 +460,32 @@ class SettingsUi(private val a: Activity) {
     }
 
     /** Theme picker: a 2x2 grid of live miniatures (real shell + keycap skin of each theme); tapping one applies it. */
-    fun themePicker(onChange: () -> Unit): View = LinearLayout(a).apply {
-        orientation = LinearLayout.VERTICAL
-        setPadding(rowPad, 14.dp, rowPad, 16.dp)
+    fun themePicker(onChange: () -> Unit): View = stack().apply {
         addView(TextView(a).apply { text = "Theme"; textSize = 17f; setTextColor(onSurface) })
         val cards = ArrayList<Pair<KbTheme, View>>()
         fun refresh() {
             val cur = KbTheme.current(a)
             cards.forEach { (th, v) ->
                 v.background = GradientDrawable().apply {
-                    cornerRadius = 18.dp.toFloat()
+                    cornerRadius = Metrics.FIELD_RADIUS.dp.toFloat()
                     setColor(segTrack)
                     if (th == cur) setStroke(3.dp, primary)
                 }
             }
         }
-        val grid = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL; setPadding(0, 12.dp, 0, 0) }
+        val grid = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL; setPadding(0, 14.dp, 0, 0) }
         KbTheme.values().toList().chunked(2).forEach { pair ->
             val line = LinearLayout(a)
             pair.forEachIndexed { i, th ->
                 val card = LinearLayout(a).apply {
                     orientation = LinearLayout.VERTICAL
-                    setPadding(8.dp, 8.dp, 8.dp, 10.dp)
+                    setPadding(8.dp, 8.dp, 8.dp, 12.dp)
                     contentDescription = th.label
                     addView(ThemeSwatch(a, th), LinearLayout.LayoutParams(-1, 76.dp))
-                    addView(TextView(a).apply { text = th.label; textSize = 14.5f; setTextColor(onSurface); typeface = medium },
-                        LinearLayout.LayoutParams(-2, -2).apply { topMargin = 8.dp })
-                    addView(TextView(a).apply { text = th.blurb; textSize = 11.5f; setTextColor(onSurfaceVar) })
+                    addView(TextView(a).apply { text = th.label; textSize = 15f; setTextColor(onSurface); typeface = medium },
+                        LinearLayout.LayoutParams(-2, -2).apply { topMargin = 8.dp; marginStart = 4.dp })
+                    addView(TextView(a).apply { text = th.blurb; textSize = 12f; setTextColor(onSurfaceVar) },
+                        LinearLayout.LayoutParams(-2, -2).apply { marginStart = 4.dp })
                     setOnClickListener {
                         if (KbTheme.current(a) != th) { Prefs.setStr(a, KbTheme.PREF, th.id); refresh(); onChange() }
                     }
@@ -423,37 +506,26 @@ class SettingsUi(private val a: Activity) {
             imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH
         }
         val row = LinearLayout(a).apply {
-            gravity = Gravity.CENTER_VERTICAL; setPadding(18.dp, 0, 18.dp, 0)
+            gravity = Gravity.CENTER_VERTICAL; setPadding(20.dp, 0, 20.dp, 0)
             addView(ImageView(a).apply { setImageResource(R.drawable.ic_search); imageTintList = ColorStateList.valueOf(onSurfaceVar) },
-                LinearLayout.LayoutParams(20.dp, 20.dp).apply { marginEnd = 10.dp })
+                LinearLayout.LayoutParams(22.dp, 22.dp).apply { marginEnd = 10.dp })
             addView(input, LinearLayout.LayoutParams(0, -1, 1f))
         }
         val bar = GlassBar(a, src, glassVeil).apply { addView(row, FrameLayout.LayoutParams(-1, -1)) }
         return bar to input
     }
 
-    /** iOS search field: a grey rounded bar with a magnifier. */
-    fun searchField(hint: String): EditText = EditText(a).apply {
-        this.hint = hint; textSize = 17f; maxLines = 1; isSingleLine = true
-        setTextColor(onSurface); setHintTextColor(onSurfaceVar)
-        setPadding(18.dp, 12.dp, 18.dp, 12.dp)
-        background = GradientDrawable().apply { cornerRadius = 100.dp.toFloat(); setColor(surface) }
-        compoundDrawablePadding = 10.dp
-        androidx.core.content.ContextCompat.getDrawable(a, R.drawable.ic_search)?.mutate()?.let { d ->
-            d.setBounds(0, 0, 20.dp, 20.dp); d.setTint(onSurfaceVar)
-            setCompoundDrawablesRelative(d, null, null, null)
-        }
-    }
-
+    /** The "Try it" field: a recessed well whose corners are concentric with its card. */
     fun testField(): Pair<View, EditText> {
+        val pad = 12.dp
         val input = EditText(a).apply {
             hint = "Type here to test…"; textSize = 17f
             setTextColor(onSurface); setHintTextColor(onSurfaceVar)
-            minLines = 2; gravity = Gravity.TOP or Gravity.START
-            setPadding(16.dp, 12.dp, 16.dp, 12.dp)
-            background = GradientDrawable().apply { cornerRadius = 18.dp.toFloat(); setColor(inputBg) }
+            minLines = 3; gravity = Gravity.TOP or Gravity.START
+            setPadding(16.dp, 14.dp, 16.dp, 14.dp)
+            background = GradientDrawable().apply { cornerRadius = concentric(pad); setColor(inputBg) }
         }
-        val wrap = LinearLayout(a).apply { setPadding(14.dp, 14.dp, 14.dp, 14.dp); addView(input, LinearLayout.LayoutParams(-1, -2)) }
+        val wrap = LinearLayout(a).apply { setPadding(pad, pad, pad, pad); addView(input, LinearLayout.LayoutParams(-1, -2)) }
         return wrap to input
     }
 }

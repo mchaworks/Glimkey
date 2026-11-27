@@ -14,8 +14,9 @@ import android.view.accessibility.AccessibilityNodeInfo
 import androidx.core.graphics.ColorUtils
 
 /**
- * iOS-style switch with a Material 3 Expressive touch: the thumb stretches while pressed and the track tone flows to the
- * new state on the same smooth ease as the keyboard's Blur Replace (no spring, no overshoot).
+ * iOS 26 switch (a wide capsule thumb on a capsule track) with Material 3 Expressive touches: the thumb stretches while
+ * pressed, a check mark grows inside it when on, and the track tone flows to the new state on the same smooth ease as the
+ * keyboard's Blur Replace (no spring, no overshoot).
  */
 @SuppressLint("ViewConstructor")
 internal class PillSwitch(
@@ -33,6 +34,10 @@ internal class PillSwitch(
     private val track = Paint(Paint.ANTI_ALIAS_FLAG)
     private val thumb = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = thumbColor }
     private val ring = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = 1.dp.toFloat(); color = 0x26000000 }
+    private val mark = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE; strokeCap = Paint.Cap.ROUND; strokeJoin = Paint.Join.ROUND; color = onColor
+    }
+    private val markPath = android.graphics.Path()
     private val r = RectF()
     private val inset = 2.dp.toFloat()
 
@@ -64,7 +69,7 @@ internal class PillSwitch(
         }
     }
 
-    override fun onMeasure(w: Int, h: Int) = setMeasuredDimension(52.dp, 32.dp)
+    override fun onMeasure(w: Int, h: Int) = setMeasuredDimension(Metrics.SWITCH_W.dp, Metrics.SWITCH_H.dp)
 
     override fun onDraw(c: Canvas) {
         val w = width.toFloat(); val h = height.toFloat()
@@ -73,11 +78,20 @@ internal class PillSwitch(
         r.set(0f, 0f, w, h)
         c.drawRoundRect(r, h / 2f, h / 2f, track)
         val d = h - inset * 2f
-        val tw = d + stretch * 6.dp
+        val tw = d * 1.3f + stretch * 6.dp
         val left = inset + (w - inset * 2f - tw) * progress
         r.set(left, inset, left + tw, inset + d)
         c.drawRoundRect(r, d / 2f, d / 2f, thumb)
         c.drawRoundRect(r, d / 2f, d / 2f, ring)
+        if (progress > 0.02f) {
+            // check mark grows in with the track tone
+            val cx = r.centerX(); val cy = r.centerY(); val k = d / 28f * progress
+            markPath.reset()
+            markPath.moveTo(cx - 4.5f * k, cy + 0.4f * k); markPath.lineTo(cx - 1.4f * k, cy + 3.4f * k); markPath.lineTo(cx + 4.6f * k, cy - 3.2f * k)
+            mark.strokeWidth = 2.2f * k.coerceAtLeast(0.01f)
+            mark.alpha = (255 * progress).toInt()
+            c.drawPath(markPath, mark)
+        }
     }
 
     @SuppressLint("ClickableViewAccessibility")
@@ -122,7 +136,7 @@ internal class Segmented(
     private val bg = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = trackColor }
     private val pill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = pillColor }
     private val ring = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = 1.dp.toFloat(); color = 0x14000000 }
-    private val text = Paint(Paint.ANTI_ALIAS_FLAG).apply { textAlign = Paint.Align.CENTER; textSize = 13.5f * ctx.resources.displayMetrics.scaledDensity; typeface = font }
+    private val text = Paint(Paint.ANTI_ALIAS_FLAG).apply { textAlign = Paint.Align.CENTER; textSize = 14f * ctx.resources.displayMetrics.scaledDensity; typeface = font }
     private val fm = Paint.FontMetrics()
     private val r = RectF()
     private val pad = 3.dp.toFloat()
@@ -147,7 +161,7 @@ internal class Segmented(
         }
     }
 
-    override fun onMeasure(w: Int, h: Int) = setMeasuredDimension(MeasureSpec.getSize(w), 40.dp)
+    override fun onMeasure(w: Int, h: Int) = setMeasuredDimension(MeasureSpec.getSize(w), Metrics.SEGMENT_H.dp)
 
     override fun onDraw(c: Canvas) {
         val w = width.toFloat(); val h = height.toFloat()

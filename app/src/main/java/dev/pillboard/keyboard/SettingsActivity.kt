@@ -1,7 +1,6 @@
 package dev.pillboard.keyboard
 
 import android.app.Activity
-import android.app.AlertDialog
 import android.content.Context
 import android.content.Intent
 import android.content.res.ColorStateList
@@ -13,7 +12,6 @@ import com.example.liquidglass.LiquidGlassView
 import android.widget.ImageView
 import android.widget.TextView
 import androidx.core.content.res.ResourcesCompat
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
@@ -34,20 +32,20 @@ import androidx.core.view.WindowInsetsCompat
 /** Home + subpages (Typing, Appearance, Feedback, Advanced, About) with search. One activity, in-place navigation. */
 class SettingsActivity : Activity() {
 
-    private enum class Page(val label: String, val sub: String, val icon: Int = 0, val tile: Int = 0, val parent: Page? = null) {
+    private enum class Page(val label: String, val sub: String, val icon: Int = 0, val parent: Page? = null) {
         HOME("Glimkey", ""),
-        TYPING("Typing", "Suggestions, auto-correction, cursor, key timing, stats", R.drawable.ic_set_typing, 0xFF0A84FF.toInt()),
-        TRANSLATE("Translation", "Translate button, service, target language", R.drawable.ic_translate, 0xFF32ADE6.toInt()),
-        APPEARANCE("Appearance", "Theme, colors, glass, key size and shape, effects", R.drawable.ic_set_look, 0xFFBF5AF2.toInt()),
-        LOOK_THEME("Theme & mode", "Keyboard theme, light / dark", R.drawable.ic_set_look, 0xFFBF5AF2.toInt(), parent = APPEARANCE),
-        LOOK_COLOR("Colors", "Accent color, three-tone accent", R.drawable.ic_set_look, 0xFFFF375F.toInt(), parent = APPEARANCE),
-        LOOK_GLASS("Glass & blur", "Backdrop blur, tint, key opacity, refraction, lens", R.drawable.ic_set_look, 0xFF32ADE6.toInt(), parent = APPEARANCE),
-        LOOK_KEYS("Keys", "Height, shape, spacing, popup", R.drawable.ic_set_layout, 0xFFFF9F0A.toInt(), parent = APPEARANCE),
-        LOOK_FX("Effects", "Tap and back effects, animation", R.drawable.ic_set_feedback, 0xFF30B650.toInt(), parent = APPEARANCE),
-        LAYOUT("Layout", "Style, number row, hints, one-handed, strip button, emoji", R.drawable.ic_set_layout, 0xFFFF9F0A.toInt()),
-        FEEDBACK("Feedback", "Haptics and typing sound", R.drawable.ic_set_feedback, 0xFF30B650.toInt()),
-        ADVANCED("Advanced", "Learned data, backup and restore, reset", R.drawable.ic_set_more, 0xFF8E8E93.toInt()),
-        ABOUT("About", "Version, license, credits", R.drawable.ic_set_info, 0xFF5AB8E8.toInt()),
+        TYPING("Typing", "Suggestions, auto-correction, cursor, key timing, stats", R.drawable.ic_set_typing),
+        TRANSLATE("Translation", "Translate button, service, target language", R.drawable.ic_translate),
+        APPEARANCE("Appearance", "Theme, colors, glass, key size and shape, effects", R.drawable.ic_set_palette),
+        LOOK_THEME("Theme & mode", "Keyboard theme, light / dark", R.drawable.ic_set_theme, parent = APPEARANCE),
+        LOOK_COLOR("Colors", "Accent color, three-tone accent", R.drawable.ic_set_look, parent = APPEARANCE),
+        LOOK_GLASS("Glass & blur", "Backdrop blur, tint, key opacity, refraction, lens", R.drawable.ic_set_glass, parent = APPEARANCE),
+        LOOK_KEYS("Keys", "Height, shape, spacing, popup", R.drawable.ic_set_keys, parent = APPEARANCE),
+        LOOK_FX("Effects", "Tap and back effects, animation", R.drawable.ic_set_sparkle, parent = APPEARANCE),
+        LAYOUT("Layout", "Style, number row, hints, one-handed, strip button, emoji", R.drawable.ic_set_layout),
+        FEEDBACK("Feedback", "Haptics and typing sound", R.drawable.ic_set_feedback),
+        ADVANCED("Advanced", "Learned data, backup and restore, reset", R.drawable.ic_set_more),
+        ABOUT("About", "Version, license, credits", R.drawable.ic_set_info),
     }
 
     /** 0 = Home, 1 = a page, 2 = a sub-page; going deeper arrives from the right. */
@@ -131,22 +129,22 @@ class SettingsActivity : Activity() {
                 ui.toggle("Collect typing stats", "Count keys, words and speed. Never the text, never in password fields", TypingStats.PREF, true)
             },
             Item(Page.TYPING, "Typing stats", "statistics speed wpm words keys accuracy counter", group = "Statistics") {
-                ui.link("Typing stats", "Speed, keys and words. Counts only, never your text", chevron = false) { showTypingStats() }
+                ui.link("Typing stats", "Speed, keys and words. Counts only, never your text") { showTypingStats() }
             },
             Item(Page.TRANSLATE, "Translation", "translate online language word bar") {
                 ui.toggle("Translation", "Adds a translate button to the word bar. While translate mode is open, the text of the field you are typing in is sent to the service chosen below. Never used in password fields.", "translate", false) { renderBody() }
             },
             Item(Page.TRANSLATE, "Service", "translate provider google mymemory libre online", group = "Service", visible = { translateOn() }) {
-                ui.link("Service", Translator.provider(this).label, chevron = false) { pickProvider() }
+                ui.value("Service", Translator.provider(this).label) { pickProvider() }
             },
             Item(Page.TRANSLATE, "Target language", "translate language target default system", group = "Service", visible = { translateOn() }) {
-                ui.link("Target language", Languages.nameOf(this, targetCode()), chevron = false) { pickTarget() }
+                ui.value("Target language", Languages.nameOf(this, targetCode())) { pickTarget() }
             },
             Item(Page.TRANSLATE, "Server URL", "translate libre server url host", group = "Service", visible = { translateOn() && Translator.provider(this) == Translator.Provider.LIBRE }) {
-                ui.link("Server URL", Prefs.str(this, "tr_url", "").ifEmpty { "Not set" }, chevron = false) { editText("Server URL", "tr_url", false) }
+                ui.value("Server URL", Prefs.str(this, "tr_url", "").ifEmpty { "Not set" }) { editText("Server URL", "tr_url", false) }
             },
             Item(Page.TRANSLATE, "API key", "translate libre key token", group = "Service", visible = { translateOn() && Translator.provider(this) == Translator.Provider.LIBRE }) {
-                ui.link("API key", if (Prefs.str(this, "tr_key", "").isEmpty()) "Optional" else "Set", chevron = false) { editText("API key", "tr_key", true) }
+                ui.value("API key", if (Prefs.str(this, "tr_key", "").isEmpty()) "Optional" else "Set") { editText("API key", "tr_key", true) }
             },
             Item(Page.LOOK_THEME, "Theme", "theme style paper terminal mechanical liquid glass skin look") {
                 ui.themePicker { refreshPreview(); renderBody() }
@@ -163,7 +161,7 @@ class SettingsActivity : Activity() {
                     onChange = { refreshPreview(); renderBody() })
             },
             Item(Page.LOOK_GLASS, "Glass look", "preset quick frosted clear smooth ios liquid apply blur keys one tap", visible = { KbTheme.current(this).isGlass }) {
-                ui.link("Apply glass look", "Blur on, heavy blur, light tint, flat keys like iOS 26: one tap", chevron = false) {
+                ui.action("Apply glass look", "Blur on, heavy blur, light tint, flat keys like iOS 26: one tap") {
                     Prefs.setBool(this, "blur", true); Prefs.setInt(this, "blur_radius", GlassDefaults.PRESET_RADIUS)
                     Prefs.setInt(this, "blur_tint", GlassDefaults.PRESET_TINT); Prefs.setInt(this, "key_alpha", GlassDefaults.PRESET_KEY_ALPHA)
                     renderBody(animate = true); refreshPreview()
@@ -248,7 +246,7 @@ class SettingsActivity : Activity() {
                 ui.toggle("Smart keys", "Numpad in number fields, @ in e-mail fields, / and .com in web fields", "fieldaware", true)
             },
             Item(Page.LAYOUT, "One-handed mode", "thumb left right shrink side narrow small phone reach", group = "Reach") {
-                ui.cycle("One-handed mode", "onehand", "off", listOf("off" to "Off", "left" to "Keyboard on the left", "right" to "Keyboard on the right")) { refreshPreview() }
+                ui.cycle("One-handed mode", "onehand", "off", listOf("off" to "Off", "left" to "Left", "right" to "Right")) { refreshPreview() }
             },
             Item(Page.LAYOUT, "Bottom spacing", "padding gesture bar navigation thumb height lift raise space below", group = "Reach") {
                 ui.slider("Bottom spacing", 0, 32, "bottom_pad", 0, listOf("None" to 0, "Small" to 8, "Roomy" to 20)) { refreshPreview() }
@@ -259,7 +257,7 @@ class SettingsActivity : Activity() {
             },
             Item(Page.LAYOUT, "Emoji key", "emoji smiley picker button", group = "Strip and emoji") { ui.toggle("Emoji key", "Show the emoji button", "emoji", true) { refreshPreview(); renderBody() } },
             Item(Page.LAYOUT, "Emoji key position", "emoji smiley button comma capsule widget place", group = "Strip and emoji", visible = { Prefs.bool(this, "emoji", true) && !Prefs.gboard(this) }) {
-                ui.cycle("Emoji key position", "emoji_pos", "capsule", listOf("capsule" to "On the strip button (swipe or hold)", "comma" to "Next to the comma key")) { refreshPreview(); renderBody() }
+                ui.cycle("Emoji key position", "emoji_pos", "capsule", listOf("capsule" to "Strip button", "comma" to "Beside comma")) { refreshPreview(); renderBody() }
             },
             Item(Page.FEEDBACK, "Haptic feedback", "vibration vibrate", group = "Haptics") { ui.toggle("Haptic feedback", "Vibrate on key press", "haptic", true) { renderBody(animate = true) } },
             Item(Page.FEEDBACK, "Haptic strength", "vibration vibrate strength intensity power haptic light strong", group = "Haptics", visible = { Prefs.bool(this, "haptic", true) }) {
@@ -281,10 +279,10 @@ class SettingsActivity : Activity() {
                 ui.toggle("Haptic on cursor slide", "A faint tick each time the cursor moves while you slide on the space bar", "haptic_slide", true) { if (it) Haptics.play(this, android.view.HapticFeedbackConstants.CLOCK_TICK) }
             },
             Item(Page.FEEDBACK, "Haptic engine", "vibration haptic engine system advanced primitive no vibration fix", group = "Haptics", visible = { Prefs.bool(this, "haptic", true) }) {
-                ui.cycle("Haptic engine", "haptic_engine", "system", listOf("system" to "Standard", "advanced" to "Advanced (strength)")) { Haptics.play(this) }
+                ui.cycle("Haptic engine", "haptic_engine", "system", listOf("system" to "Standard", "advanced" to "Advanced")) { Haptics.play(this) }
             },
             Item(Page.FEEDBACK, "Haptic test", "vibration haptic test diagnose debug no vibration not working", group = "Haptics") {
-                ui.link("Haptic test", "Try each vibration method and see which one your phone feels", chevron = false) { HapticLab.show(this) }
+                ui.link("Haptic test", "Try each vibration method and see which one your phone feels") { HapticLab.show(this) }
             },
             Item(Page.FEEDBACK, "Typing sound", "sound click key audio", group = "Typing sound") {
                 ui.toggle("Typing sound", "Play a click on every key press", "sound", false) { if (it) TypingSound.play(this, TypingSound.Kind.STANDARD); renderBody(animate = true) }
@@ -296,21 +294,24 @@ class SettingsActivity : Activity() {
                 ui.slider("Sound volume", 10, 300, "sound_vol", 60, listOf("Quiet" to 30, "Standard" to 60, "Loud" to 100, "Max" to 300), unit = "%") { TypingSound.play(this, TypingSound.Kind.STANDARD) }
             },
             Item(Page.ADVANCED, "Clear learned words", "forget learned dictionary personal suggestions words reset", group = "Learned data") {
-                ui.link("Clear learned words", "Forget the words and word pairs the keyboard learned from you", chevron = false) {
+                ui.action("Clear learned words", "Forget the words and word pairs the keyboard learned from you") {
                     Suggestions.clearLearned(this)
                     android.widget.Toast.makeText(this, "Learned words cleared", android.widget.Toast.LENGTH_SHORT).show()
                 }
             },
-            Item(Page.ADVANCED, "Clear recent emoji", "emoji recent history forget", group = "Learned data") { ui.link("Clear recent emoji", "Forget the emoji you used lately", chevron = false) { EmojiData.clearRecents(this) } },
+            Item(Page.ADVANCED, "Clear recent emoji", "emoji recent history forget", group = "Learned data") { ui.action("Clear recent emoji", "Forget the emoji you used lately") {
+                    EmojiData.clearRecents(this)
+                    android.widget.Toast.makeText(this, "Recent emoji cleared", android.widget.Toast.LENGTH_SHORT).show()
+                } },
             Item(Page.ADVANCED, "Back up settings", "export backup copy save clipboard json transfer", group = "Backup") {
-                ui.link("Back up settings", "Copy all your settings to the clipboard as text", chevron = false) {
+                ui.action("Back up settings", "Copy all your settings to the clipboard as text") {
                     val cm = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
                     cm.setPrimaryClip(android.content.ClipData.newPlainText("Glimkey settings", Prefs.exportJson(this)))
                     android.widget.Toast.makeText(this, "Settings copied to the clipboard", android.widget.Toast.LENGTH_SHORT).show()
                 }
             },
             Item(Page.ADVANCED, "Restore settings", "import restore paste clipboard json transfer", group = "Backup") {
-                ui.link("Restore settings", "Paste a backup from the clipboard", chevron = false) {
+                ui.action("Restore settings", "Paste a backup from the clipboard") {
                     val cm = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
                     val text = cm.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(this)?.toString().orEmpty()
                     val n = Prefs.importJson(this, text)
@@ -318,13 +319,13 @@ class SettingsActivity : Activity() {
                     else { android.widget.Toast.makeText(this, "$n settings restored", android.widget.Toast.LENGTH_SHORT).show(); recreate() }
                 }
             },
-            Item(Page.ADVANCED, "Reset settings", "default restore", group = "Reset") { ui.link("Reset settings", "Return all keyboard settings to default", chevron = false) { confirmReset() } },
+            Item(Page.ADVANCED, "Reset settings", "default restore", group = "Reset") { ui.action("Reset settings", "Return all keyboard settings to default", destructive = true) { confirmReset() } },
             Item(Page.ABOUT, "Version", "build about") { ui.info("Version", versionName()) },
             Item(Page.ABOUT, "Source code", "github repository open source code") {
-                ui.link("Source code", "github.com/mchaworks/Glimkey", icon = R.drawable.ic_set_more, tile = 0xFF1C1C1E.toInt()) { openUrl(REPO) }
+                ui.link("Source code", "github.com/mchaworks/Glimkey", icon = R.drawable.ic_set_more, tone = 0) { openUrl(REPO) }
             },
             Item(Page.ABOUT, "Report an issue", "bug feedback github issue problem") {
-                ui.link("Report an issue", "Something broken or missing", icon = R.drawable.ic_set_info, tile = 0xFFFF453A.toInt()) { openUrl("$REPO/issues") }
+                ui.link("Report an issue", "Something broken or missing", icon = R.drawable.ic_set_info, tone = 1) { openUrl("$REPO/issues") }
             },
             Item(Page.ABOUT, "License", "mit open source licence") { ui.info("License", "MIT") },
             Item(Page.ABOUT, "Font", "google sans rounded ofl typeface licence") { ui.info("Font", "Google Sans Rounded · OFL 1.1") },
@@ -367,7 +368,7 @@ class SettingsActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             addView(this@SettingsActivity.top, LinearLayout.LayoutParams(-1, -2))
             addView(this@SettingsActivity.body, LinearLayout.LayoutParams(-1, -2))
-            setPadding(16.dp, 4.dp, 16.dp, 32.dp)
+            setPadding(Metrics.PAGE_PAD.dp, 4.dp, Metrics.PAGE_PAD.dp, 32.dp)
         }
         // content fades out softly under the nav bar / pinned preview instead of being cut by a hard edge (top only; the bottom stays crisp)
         scroll = object : ScrollView(this) {
@@ -378,7 +379,7 @@ class SettingsActivity : Activity() {
         }
         scroll.setOnScrollChangeListener { _, _, y, _, _ -> updateNav(y); (searchBar as? GlassBar)?.pulse(250) }
         nav = buildNav()
-        pinned = FrameLayout(this).apply { visibility = View.GONE; setBackgroundColor(ui.pageBg); setPadding(16.dp, 2.dp, 16.dp, 10.dp) }
+        pinned = FrameLayout(this).apply { visibility = View.GONE; setBackgroundColor(ui.pageBg); setPadding(Metrics.PAGE_PAD.dp, 2.dp, Metrics.PAGE_PAD.dp, 10.dp) }
         pageBox = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             addView(pinned, LinearLayout.LayoutParams(-1, -2))
@@ -400,12 +401,12 @@ class SettingsActivity : Activity() {
         // the search capsule floats over the page (outside [content], so page transitions don't snapshot it)
         val stack = FrameLayout(this).apply {
             addView(content, FrameLayout.LayoutParams(-1, -1))
-            addView(searchBar, FrameLayout.LayoutParams(-1, 52.dp, Gravity.BOTTOM).apply { setMargins(16.dp, 0, 16.dp, 12.dp) })
+            addView(searchBar, FrameLayout.LayoutParams(-1, Metrics.SEARCH_H.dp, Gravity.BOTTOM).apply { setMargins(Metrics.PAGE_PAD.dp, 0, Metrics.PAGE_PAD.dp, 12.dp) })
         }
         val rootCol = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(ui.pageBg)
-            addView(nav, LinearLayout.LayoutParams(-1, 52.dp))
+            addView(nav, LinearLayout.LayoutParams(-1, Metrics.NAV_H.dp))
             addView(stack, LinearLayout.LayoutParams(-1, 0, 1f))
         }
         window.setBackgroundDrawable(ColorDrawable(ui.pageBg))
@@ -444,7 +445,7 @@ class SettingsActivity : Activity() {
     }
 
     /** Bottom padding of the list: the system bars / keyboard, plus room for the floating search capsule on Home. */
-    private fun applyColPad() = col.setPadding(16.dp, 4.dp, 16.dp, insetBottom + 32.dp + if (page == Page.HOME) 72.dp else 0)
+    private fun applyColPad() = col.setPadding(Metrics.PAGE_PAD.dp, 4.dp, Metrics.PAGE_PAD.dp, insetBottom + 32.dp + if (page == Page.HOME) Metrics.SEARCH_H.dp + 24.dp else 0)
 
     private fun setSearchText(t: String) { searchSilent = true; searchInput.setText(t); searchSilent = false }
 
@@ -453,15 +454,15 @@ class SettingsActivity : Activity() {
         // iOS 26: Back is a round glass button (no text, no bar line); the small title still arrives as the large one scrolls away
         navBack = LiquidGlassView(context).apply {
             visibility = View.GONE; contentDescription = "Back"
-            cornerRadius = 20.dp.toFloat(); bevelWidth = 8.dp.toFloat(); refractionHeight = 8.dp.toFloat()
+            cornerRadius = (Metrics.BACK / 2).dp.toFloat(); bevelWidth = 8.dp.toFloat(); refractionHeight = 8.dp.toFloat()
             dispersionStrength = 0.08f; glassTint = ui.glassVeil; pressScale = 0.9f
             isClickable = true; isFocusable = true
             addView(ImageView(context).apply {
                 setImageResource(R.drawable.ic_chevron_left); imageTintList = ColorStateList.valueOf(ui.onSurface)
-            }, FrameLayout.LayoutParams(24.dp, 24.dp, Gravity.CENTER))
+            }, FrameLayout.LayoutParams(26.dp, 26.dp, Gravity.CENTER))
             setOnClickListener { up() }
         }
-        addView(navBack, FrameLayout.LayoutParams(40.dp, 40.dp, Gravity.START or Gravity.CENTER_VERTICAL).apply { marginStart = 16.dp })
+        addView(navBack, FrameLayout.LayoutParams(Metrics.BACK.dp, Metrics.BACK.dp, Gravity.START or Gravity.CENTER_VERTICAL).apply { marginStart = Metrics.PAGE_PAD.dp })
         // full width so the old title keeps its room while it Blur-Replaces into the new one (it passes touches to Back)
         navTitle = BlurTextView(context).apply {
             textSize = 17f; setTextColor(ui.onSurface); alpha = 0f; gravity = Gravity.CENTER
@@ -520,7 +521,7 @@ class SettingsActivity : Activity() {
     /** A home row that opens [p]; remembered so the page can open out of it and fold back into it. */
     private fun pageLink(p: Page): View {
         val holder = arrayOfNulls<View>(1)
-        val row = ui.link(p.label, p.sub, icon = p.icon, tile = p.tile) { go(p, holder[0]) }
+        val row = ui.link(p.label, p.sub, icon = p.icon, tone = p.ordinal) { go(p, holder[0]) }
         holder[0] = row
         rowFor[p] = row
         return row
@@ -531,14 +532,14 @@ class SettingsActivity : Activity() {
         top.removeAllViews()
         status = null
         if (page == Page.HOME) {
-            top.addView(ui.title("Glimkey", 36f).apply { setPadding(2.dp, 0, 0, 0) })
-            top.addView(ui.caption("Your keyboard, your style.").apply { setPadding(2.dp, 2.dp, 0, 16.dp) })
+            top.addView(ui.title("Glimkey").apply { setPadding(4.dp, 0, 0, 0) })
+            top.addView(ui.caption("Your keyboard, your style.").apply { setPadding(4.dp, 2.dp, 0, 18.dp) })
             val st = ui.badge(minW = 150.dp).also { status = it }
             top.addView(ui.card(LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
                 addView(LinearLayout(context).apply {
                     gravity = Gravity.CENTER_VERTICAL
-                    addView(ui.heroTile(R.drawable.ic_set_typing), LinearLayout.LayoutParams(46.dp, 46.dp).apply { marginEnd = 14.dp })
+                    addView(ui.heroTile(R.drawable.ic_set_typing), LinearLayout.LayoutParams(Metrics.HERO.dp, Metrics.HERO.dp).apply { marginEnd = 14.dp })
                     addView(LinearLayout(context).apply {
                         orientation = LinearLayout.VERTICAL
                         addView(TextView(context).apply {
@@ -550,21 +551,21 @@ class SettingsActivity : Activity() {
                 })
                 addView(LinearLayout(context).apply {
                     addView(ui.button("Enable", false) { startActivity(Intent(Settings.ACTION_INPUT_METHOD_SETTINGS)) },
-                        LinearLayout.LayoutParams(0, 48.dp, 1f).apply { marginEnd = 5.dp })
+                        LinearLayout.LayoutParams(0, Metrics.BUTTON_H.dp, 1f).apply { marginEnd = 6.dp })
                     addView(ui.button("Switch", true) {
                         (getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager).showInputMethodPicker()
-                    }, LinearLayout.LayoutParams(0, 48.dp, 1f).apply { marginStart = 5.dp })
+                    }, LinearLayout.LayoutParams(0, Metrics.BUTTON_H.dp, 1f).apply { marginStart = 6.dp })
                 }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = 16.dp })
             }, h = 16.dp, v = 16.dp), ui.lp(bottom = 14.dp))
             updateStatus()
         } else {
-            top.addView(ui.title(page.label, 32f).apply { setPadding(2.dp, 4.dp, 0, 4.dp) })
+            top.addView(ui.title(page.label).apply { setPadding(4.dp, 4.dp, 0, 6.dp) })
             if (page == Page.ABOUT) top.addView(LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL; setPadding(0, 18.dp, 0, 6.dp)
                 addView(ImageView(context).apply {
                     setImageDrawable(packageManager.getApplicationIcon(packageName))
                     outlineProvider = object : android.view.ViewOutlineProvider() {
-                        override fun getOutline(v: View, o: android.graphics.Outline) { o.setRoundRect(0, 0, v.width, v.height, 22.dp.toFloat()) }
+                        override fun getOutline(v: View, o: android.graphics.Outline) { o.setRoundRect(0, 0, v.width, v.height, 24.dp.toFloat()) }
                     }
                     clipToOutline = true
                 }, LinearLayout.LayoutParams(88.dp, 88.dp))
@@ -573,8 +574,8 @@ class SettingsActivity : Activity() {
                     ResourcesCompat.getFont(context, R.font.gsr_bold)?.let { typeface = it }
                 }, LinearLayout.LayoutParams(-2, -2).apply { topMargin = 14.dp })
                 addView(ui.badge().apply { text = "Version ${versionName()}" }, LinearLayout.LayoutParams(-2, -2).apply { topMargin = 8.dp })
-                addView(ui.caption("An open-source keyboard with Material 3 Expressive shapes and iOS-flavoured looks.").apply {
-                    gravity = Gravity.CENTER; textSize = 14f; setPadding(28.dp, 12.dp, 28.dp, 0)
+                addView(ui.note("An open-source keyboard with Material 3 Expressive shapes and iOS 26 looks.", top = 12.dp).apply {
+                    gravity = Gravity.CENTER; textSize = 14f
                 })
             })
         }
@@ -615,8 +616,7 @@ class SettingsActivity : Activity() {
                 body.addView(ui.box(listOf(aboutItem("Source code"), aboutItem("Report an issue")), inset = ui.tileInset), ui.lp())
                 body.addView(ui.section("Legal and credits"))
                 body.addView(ui.box(listOf(aboutItem("License"), aboutItem("Font"), aboutItem("Key sounds"))), ui.lp())
-                body.addView(ui.caption("Version ${versionName()} · Made with care, on-device only. Nothing you type leaves your phone unless Translation is on.")
-                    .apply { textSize = 13f; setPadding(20.dp, 12.dp, 20.dp, 0) })
+                body.addView(ui.note("Version ${versionName()} · Made with care, on-device only. Nothing you type leaves your phone unless Translation is on.", top = 12.dp))
             }
             else -> {
                 // one card per group (the list order is the display order), each under its own small label
@@ -624,10 +624,10 @@ class SettingsActivity : Activity() {
                     if (group.isNotEmpty()) body.addView(ui.section(group))
                     body.addView(ui.box(rows.map { it.make() }), ui.lp())
                 }
-                pageNotes[page]?.let { note -> body.addView(ui.caption(note).apply { textSize = 13f; setPadding(20.dp, 8.dp, 20.dp, 0) }) }
+                pageNotes[page]?.let { note -> body.addView(ui.note(note)) }
                 if (pageKeys[page] != null) body.addView(ui.box(listOf(
-                    ui.link("Reset this page", "Return only the options on ${page.label} to their defaults", chevron = false) { confirmResetPage() })),
-                    LinearLayout.LayoutParams(-1, -2).apply { topMargin = 16.dp })
+                    ui.action("Reset this page", "Return only the options on ${page.label} to their defaults", destructive = true) { confirmResetPage() })),
+                    LinearLayout.LayoutParams(-1, -2).apply { topMargin = 24.dp })
             }
         }
     }
@@ -639,7 +639,7 @@ class SettingsActivity : Activity() {
                 (it.title.lowercase().contains(q) || it.keys.contains(q) || it.group.lowercase().contains(q) || it.page.label.lowercase().contains(q))
         }
         if (hits.isEmpty()) {
-            body.addView(ui.caption("No matching settings").apply { setPadding(8.dp, 24.dp, 0, 0) })
+            body.addView(ui.empty("No matching settings"))
         } else {
             // each page's matches in their own card, labelled with where they live (Appearance › Colors)
             hits.groupBy { it.page }.forEach { (p, rows) ->
@@ -655,16 +655,15 @@ class SettingsActivity : Activity() {
         val subs = listOf(Page.LOOK_THEME, Page.LOOK_COLOR, Page.LOOK_GLASS, Page.LOOK_KEYS, Page.LOOK_FX)
             .filter { glass || (it != Page.LOOK_COLOR && it != Page.LOOK_GLASS) }
         body.addView(ui.box(subs.map { p -> pageLink(p) }, inset = ui.tileInset), ui.lp())
-        if (!glass) body.addView(ui.caption("Colors and Glass & blur are for the Liquid Glass theme. Other themes bring their own palette.")
-            .apply { textSize = 13f; setPadding(20.dp, 4.dp, 20.dp, 0) })
+        if (!glass) body.addView(ui.note("Colors and Glass & blur are for the Liquid Glass theme. Other themes bring their own palette.", top = 10.dp))
     }
 
     private fun home() {
         rowFor.clear()
         body.addView(LinearLayout(this).apply {
-            addView(ui.button("Customize", false) { go(Page.APPEARANCE) }, LinearLayout.LayoutParams(0, 48.dp, 1f).apply { marginEnd = 5.dp })
+            addView(ui.button("Customize", false) { go(Page.APPEARANCE) }, LinearLayout.LayoutParams(0, Metrics.BUTTON_H.dp, 1f).apply { marginEnd = 6.dp })
             addView(ui.button("Test typing", true) { scroll.smoothScrollTo(0, (tryHeader?.top ?: 0) + this@SettingsActivity.top.height); focusTest() },
-                LinearLayout.LayoutParams(0, 48.dp, 1f).apply { marginStart = 5.dp })
+                LinearLayout.LayoutParams(0, Metrics.BUTTON_H.dp, 1f).apply { marginStart = 6.dp })
         }, ui.lp())
         body.addView(ui.section("Settings"))
         body.addView(ui.box(listOf(Page.APPEARANCE, Page.LAYOUT, Page.TYPING, Page.FEEDBACK, Page.TRANSLATE)
@@ -678,47 +677,48 @@ class SettingsActivity : Activity() {
     }
 
     private fun showTypingStats() {
-        val tv = android.widget.TextView(this).apply { text = TypingStats.report(this@SettingsActivity); textSize = 15f; setPadding(64, 32, 64, 8); setTextColor(ui.onSurface) }
-        MaterialAlertDialogBuilder(this).setTitle("Typing stats").setView(tv)
+        val tv = android.widget.TextView(this).apply {
+            text = TypingStats.report(this@SettingsActivity); textSize = 15f; setLineSpacing(0f, 1.15f)
+            setPadding(24.dp, 8.dp, 24.dp, 0); setTextColor(ui.onSurface)
+        }
+        ui.tint(ui.dialog("Typing stats").setView(tv)
             .setPositiveButton("Close", null)
             .setNegativeButton("Reset") { _, _ -> TypingStats.reset(this) }
-            .show().also { tintDialog(it) }
+            .show())
     }
 
     private fun targetCode() = Prefs.str(this, "tr_target", "").ifEmpty { Languages.defaultTarget(this) }
 
     private fun pickProvider() {
         val ps = Translator.Provider.values()
-        MaterialAlertDialogBuilder(this).setTitle("Translation service")
+        ui.tint(ui.dialog("Translation service")
             .setSingleChoiceItems(ps.map { it.label }.toTypedArray(), ps.indexOf(Translator.provider(this))) { d, i ->
                 Prefs.setStr(this, "tr_provider", ps[i].id); d.dismiss(); renderBody(animate = true)
-            }.setNegativeButton("Cancel", null).show().also { tintDialog(it) }
-    }
-
-    private fun tintDialog(d: androidx.appcompat.app.AlertDialog) {
-        d.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE)?.setTextColor(ui.primary)
-        d.getButton(androidx.appcompat.app.AlertDialog.BUTTON_NEGATIVE)?.setTextColor(ui.primary)
+            }.setNegativeButton("Cancel", null).show())
     }
 
     private fun pickTarget() {
         val ls = Languages.ordered(this)
-        MaterialAlertDialogBuilder(this).setTitle("Target language")
+        ui.tint(ui.dialog("Target language")
             .setSingleChoiceItems(ls.map { it.name }.toTypedArray(), ls.indexOfFirst { it.code == targetCode() }) { d, i ->
                 Prefs.setStr(this, "tr_target", ls[i].code); d.dismiss(); renderBody(animate = true)
-            }.setNegativeButton("Cancel", null).show().also { tintDialog(it) }
+            }.setNegativeButton("Cancel", null).show())
     }
 
     private fun editText(title: String, key: String, secret: Boolean) {
         val input = EditText(this).apply {
             setText(Prefs.str(this@SettingsActivity, key, "")); setSingleLine()
+            setTextColor(ui.onSurface); setHintTextColor(ui.onSurfaceVar); textSize = 17f
+            setPadding(16.dp, 12.dp, 16.dp, 12.dp)
+            background = android.graphics.drawable.GradientDrawable().apply { cornerRadius = 16.dp.toFloat(); setColor(ui.inputBg) }
             inputType = android.text.InputType.TYPE_CLASS_TEXT or
                 if (secret) android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD else android.text.InputType.TYPE_TEXT_VARIATION_URI
             hint = if (secret) "Optional" else "https://your-server.example"
         }
-        val wrap = android.widget.FrameLayout(this).apply { setPadding(24.dp, 8.dp, 24.dp, 0); addView(input) }
-        MaterialAlertDialogBuilder(this).setTitle(title).setView(wrap)
+        val wrap = android.widget.FrameLayout(this).apply { setPadding(20.dp, 8.dp, 20.dp, 0); addView(input, FrameLayout.LayoutParams(-1, -2)) }
+        ui.tint(ui.dialog(title).setView(wrap)
             .setPositiveButton("Save") { _, _ -> Prefs.setStr(this, key, input.text.toString().trim()); renderBody(animate = true) }
-            .setNegativeButton("Cancel", null).show().also { tintDialog(it) }
+            .setNegativeButton("Cancel", null).show())
     }
 
     /** A short footnote under a page's cards, for the things the rows alone do not explain. */
@@ -750,22 +750,20 @@ class SettingsActivity : Activity() {
 
     private fun confirmResetPage() {
         val keys = pageKeys[page] ?: return
-        val d = MaterialAlertDialogBuilder(this)
-            .setTitle("Reset ${page.label}?")
+        val d = ui.dialog("Reset ${page.label}?")
             .setMessage("Only the options on this page return to their defaults.")
             .setPositiveButton("Reset") { _, _ -> Prefs.remove(this, keys); recreate() }
             .setNegativeButton("Cancel", null).create()
-        d.setOnShowListener { tintDialog(d); d.getButton(AlertDialog.BUTTON_POSITIVE)?.setTextColor(ui.error) }
+        d.setOnShowListener { ui.tint(d, destructive = true) }
         d.show()
     }
 
     private fun confirmReset() {
-        val d = MaterialAlertDialogBuilder(this)
-            .setTitle("Reset all keyboard settings?")
+        val d = ui.dialog("Reset all keyboard settings?")
             .setMessage("Themes, layout and preferences will return to their defaults.")
             .setPositiveButton("Reset") { _, _ -> Prefs.clear(this); go(Page.HOME); recreate() }
             .setNegativeButton("Cancel", null).create()
-        d.setOnShowListener { tintDialog(d); d.getButton(AlertDialog.BUTTON_POSITIVE)?.setTextColor(ui.error) }
+        d.setOnShowListener { ui.tint(d, destructive = true) }
         d.show()
     }
 

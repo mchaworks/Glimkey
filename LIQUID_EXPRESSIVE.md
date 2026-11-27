@@ -242,3 +242,17 @@ The dock used to swap the whole shell (keys included) through `swapShell` while 
 - **Cursor loupe:** snippet view under a `LiquidGlassView` (backdrop = the loupe's own parent), blur off so the text stays sharp.
 - **Removed:** `LensShader` / `LensLayer` (AGSL + RenderNode lens).
 - **Not verified (never compiled/run):** cross-window backdrop of the key lens popup, tint strengths and bevel/refraction values.
+
+## Settings app revamp (iOS 26 structure, Material 3 Expressive character)
+
+Research basis: Apple WWDC25 "Get to know the new design system" (concentricity, capsules, glass only on the floating navigation layer, scroll-edge effect instead of hard dividers, tint only for the primary action) and the Material 3 Expressive guidance (large soft shapes, shape-morphing, tonal containers, expressive motion).
+
+- **One metrics table** (`Metrics` in `SettingsUi.kt`): card radius 26dp, tile 32dp / radius 11dp, row min height 56dp, buttons 50dp, nav bar 56dp, back button 44dp. No page picks its own number.
+- **Concentric corners:** shapes inside a card derive their radius from the card (`SettingsUi.concentric(pad)`), e.g. the "Try it" well.
+- **Five row kinds, one meaning each:** `link` opens a page (tile + chevron), `value` opens a picker/editor (value + chevron), `toggle`, `action` (accent title, red when destructive; no chevron), `info`.
+- **Choices:** up to three short options render as a segmented control; more open a list dialog. Tapping a row no longer steps through options.
+- **Glass** stays on the floating layer only: back button and search capsule. Lists are solid.
+- **Tiles** rotate through the accent's primary / secondary / tertiary containers; every page has its own icon.
+- **Switch:** iOS 26 capsule thumb that stretches on press, with a Material check growing inside when on.
+- **Slider:** white capsule thumb with hairline and lift on a thicker accent track.
+- **Dialogs** (stats, pickers, reset, haptic test) share the card colour, a 28dp corner and accent buttons.

@@ -9,7 +9,7 @@ import android.view.View
 /** A miniature keyboard drawn with the real tokens, shell and keycap skin of [theme]: what you see is what you get. */
 internal class ThemeSwatch(ctx: Context, private val theme: KbTheme) : View(ctx) {
     private val t = KbTokens(ctx, theme)
-    private val shell = GlassSurfaceDrawable(t, 12.dp.toFloat().coerceAtMost(t.containerRadius), t.background, GlassSurfaceDrawable.Style.SHELL, false)
+    private val shell = GlassSurfaceDrawable(t, 10.dp.toFloat().coerceAtMost(t.containerRadius), t.background, GlassSurfaceDrawable.Style.SHELL, false)
     private val body = KeyBodyDrawable()
     private val txt = Paint(Paint.ANTI_ALIAS_FLAG).apply { textAlign = Paint.Align.CENTER; typeface = t.typeface }
     private val rows = listOf("qwerty", "asdfgh", "zxcvb")

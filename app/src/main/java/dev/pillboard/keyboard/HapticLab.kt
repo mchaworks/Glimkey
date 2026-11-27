@@ -14,11 +14,9 @@ import android.os.VibratorManager
 import android.provider.Settings
 import android.view.HapticFeedbackConstants
 import android.view.View
-import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
 
 /** Settings > Feedback > Haptic test: fires one vibration method per button, so we can see which one this phone actually plays. */
 @Suppress("DEPRECATION")
@@ -55,13 +53,22 @@ internal object HapticLab {
     private fun attrs(usage: Int) = AudioAttributes.Builder().setUsage(usage).build()
 
     fun show(a: Activity) {
+        val ui = SettingsUi(a)
         val v = vib(a)
-        val col = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL; setPadding(48, 24, 48, 8) }
-        col.addView(TextView(a).apply { text = info(a); textSize = 12f })
-        fun probe(label: String, f: (View) -> Unit) = col.addView(Button(a).apply {
-            text = label; isAllCaps = false
-            setOnClickListener { try { f(this) } catch (t: Throwable) { text = "$label  -> ERROR ${t.javaClass.simpleName}" } }
-        })
+        val col = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL; setPadding(20.dp, 8.dp, 20.dp, 8.dp) }
+        // device facts in a recessed well, monospace so the columns line up
+        col.addView(TextView(a).apply {
+            text = info(a); textSize = 12f; typeface = android.graphics.Typeface.MONOSPACE
+            setTextColor(ui.onSurfaceVar); setPadding(14.dp, 12.dp, 14.dp, 12.dp)
+            background = android.graphics.drawable.GradientDrawable().apply { cornerRadius = 16.dp.toFloat(); setColor(ui.inputBg) }
+        }, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = 12.dp })
+        fun probe(label: String, f: (View) -> Unit) {
+            val b = ui.button(label, false) { }
+            b.gravity = android.view.Gravity.CENTER_VERTICAL or android.view.Gravity.START
+            b.minHeight = Metrics.BUTTON_H.dp; b.setPadding(20.dp, 8.dp, 20.dp, 8.dp)
+            b.setOnClickListener { try { f(b) } catch (t: Throwable) { b.text = "$label  -> ERROR ${t.javaClass.simpleName}" } }
+            col.addView(b, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = 8.dp })
+        }
         if (Build.VERSION.SDK_INT >= 29 && v != null) {
             probe("1. Predefined CLICK") { v.vibrate(VibrationEffect.createPredefined(VibrationEffect.EFFECT_CLICK)) }
             probe("2. Predefined HEAVY_CLICK") { v.vibrate(VibrationEffect.createPredefined(VibrationEffect.EFFECT_HEAVY_CLICK)) }
@@ -81,7 +88,7 @@ internal object HapticLab {
         probe("9. View haptic KEYBOARD_TAP") { it.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP) }
         probe("10. View haptic + IGNORE_GLOBAL_SETTING") { it.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP, HapticFeedbackConstants.FLAG_IGNORE_GLOBAL_SETTING) }
         probe("11. The keyboard's own engine (Haptics.play)") { Haptics.play(a, HapticFeedbackConstants.KEYBOARD_TAP, it) }
-        MaterialAlertDialogBuilder(a).setTitle("Haptic test").setView(ScrollView(a).apply { addView(col) })
-            .setPositiveButton("Close", null).show()
+        ui.tint(ui.dialog("Haptic test").setView(ScrollView(a).apply { addView(col) })
+            .setPositiveButton("Close", null).show())
     }
 }
