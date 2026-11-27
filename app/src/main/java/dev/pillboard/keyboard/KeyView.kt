@@ -97,7 +97,7 @@ class KeyPreview(private val ctx: Context, private val t: KbTokens) {
         val pct = Prefs.int(ctx, "preview_blur_tint", 43).coerceIn(10, 100)
         if (frost == null || pct != frostTint) {
             frostTint = pct
-            frost = FrostDrawable(GlassSurfaceDrawable(t, t.popupRadius, ColorUtils.setAlphaComponent(t.key, pct * 255 / 100), GlassSurfaceDrawable.Style.FLOATING, useShader = false), t.popupRadius)
+            frost = FrostDrawable(GlassSurfaceDrawable(t, t.popupRadius, ColorUtils.setAlphaComponent(t.key, pct * 255 / 100), GlassSurfaceDrawable.Style.FLOATING, useShader = false), t.popupRadius, ColorUtils.compositeColors(ColorUtils.setAlphaComponent(t.key, 0x70), ColorUtils.setAlphaComponent(t.background, 0xFF)))
         }
         return frost
     }
@@ -125,7 +125,7 @@ class KeyPreview(private val ctx: Context, private val t: KbTokens) {
         val fr = frostFor() ?: return false
         fRoot = key.rootView
         fLeft = left; fTop = top; fW = w.coerceAtLeast(1); fH = h.coerceAtLeast(1)
-        fBlurDp = Prefs.int(ctx, "preview_blur_amt", 5).coerceIn(0, 16)
+        fBlurDp = Prefs.int(ctx, "preview_blur_amt", 10).coerceIn(0, 16)
         return grabFrost(fr)
     }
 
@@ -133,7 +133,7 @@ class KeyPreview(private val ctx: Context, private val t: KbTokens) {
     private fun grabFrost(fr: FrostDrawable): Boolean {
         val root = fRoot ?: return false
         return try {
-            val div = if (fBlurDp <= 8) 4 else 8
+            val div = if (fBlurDp <= 12) 4 else 8
             val bw = (fW / div).coerceAtLeast(8)
             val bh = (fH / div).coerceAtLeast(8)
             var bmp = fBmp
@@ -166,8 +166,8 @@ class KeyPreview(private val ctx: Context, private val t: KbTokens) {
             val buf = fBuf ?: return false
             buf.rewind(); bmp.copyPixelsToBuffer(buf)          // raw premultiplied pixels: the four channels are blurred alike, so alpha blurs correctly too
             // blur "radius" = sigma in dp (like RenderEffect); a box radius of ~1.14 sigma, two passes, at 1/div size
-            val r = Math.round(fBlurDp * ctx.resources.displayMetrics.density / div / 0.88f).coerceIn(0, 6)
-            if (r > 0) repeat(2) { boxH(fA, fB, bw, bh, r); boxV(fB, fA, bw, bh, r) }
+            val r = Math.round(fBlurDp * ctx.resources.displayMetrics.density / div / 0.88f).coerceIn(0, 12)
+            if (r > 0) repeat(3) { boxH(fA, fB, bw, bh, r); boxV(fB, fA, bw, bh, r) }
             buf.rewind(); bmp.copyPixelsFromBuffer(buf)
             fr.setBackdrop(bmp)
             true
@@ -841,7 +841,6 @@ class KeyView(
     }
 
     override fun onDraw(canvas: Canvas) {
-        if (frostCapturing) return
         // skins that move (paper card, mechanical cap) carry the label with the face
         val sv = canvas.save()
         canvas.translate(0f, shape.contentDy)
@@ -1059,7 +1058,7 @@ class KeyView(
 }
 
 /** Bubble background: a small blurred backdrop clipped to the rounded shape, then the [tint] drawable (the key-tone glass) over it. */
-internal class FrostDrawable(private val tint: Drawable, private val radius: Float) : Drawable() {
+internal class FrostDrawable(private val tint: Drawable, private val radius: Float, private val base: Int) : Drawable() {
     private var backdrop: android.graphics.Bitmap? = null
     private val paint = android.graphics.Paint(android.graphics.Paint.FILTER_BITMAP_FLAG or android.graphics.Paint.ANTI_ALIAS_FLAG)
     private val clip = android.graphics.Path()
@@ -1078,6 +1077,7 @@ internal class FrostDrawable(private val tint: Drawable, private val radius: Flo
         if (b != null && !b.isRecycled) {
             val save = canvas.save()
             canvas.clipPath(clip)
+            canvas.drawColor(base)
             canvas.drawBitmap(b, null, bounds, paint)
             canvas.restoreToCount(save)
         }

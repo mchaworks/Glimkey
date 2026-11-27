@@ -196,7 +196,7 @@ class SettingsActivity : Activity() {
                     "preview_blur", true, enabled = Build.VERSION.SDK_INT >= 31, onChange = { renderBody(animate = true) })
             },
             Item(Page.LOOK_GLASS, "Preview blur strength", "frosted blur key preview bubble popup soft heavy sharp live", group = "Key preview", visible = { KbTheme.current(this).isGlass && frostedPreviewOn() }) {
-                ui.slider("Preview blur strength", 0, 16, "preview_blur_amt", 5, listOf("Soft" to 2, "Standard" to 5, "Heavy" to 12)) { }
+                ui.slider("Preview blur strength", 0, 16, "preview_blur_amt", 10, listOf("Soft" to 5, "Standard" to 10, "Heavy" to 16)) { }
             },
             Item(Page.LOOK_GLASS, "Preview tint", "frosted key preview bubble popup tint opacity clear see through frosted", group = "Key preview", visible = { KbTheme.current(this).isGlass && frostedPreviewOn() }) {
                 ui.slider("Preview tint", 10, 90, "preview_blur_tint", 43, listOf("Clear" to 25, "Standard" to 43, "Frosted" to 70), unit = "%") { }
