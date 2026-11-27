@@ -227,6 +227,12 @@ class SettingsActivity : Activity() {
                     if (Build.VERSION.SDK_INT >= 31) "Key preview blurs the keys under it (light, no lens)" else "Needs Android 12+, using the plain bubble",
                     "preview_blur", true, enabled = Build.VERSION.SDK_INT >= 31)
             },
+            Item(Page.LOOK_GLASS, "Preview blur strength", "frosted blur key preview bubble popup soft heavy sharp live", visible = { KbTheme.current(this).isGlass }) {
+                ui.slider("Preview blur strength", 0, 16, "preview_blur_amt", 5, listOf("Soft" to 2, "Standard" to 5, "Heavy" to 12)) { }
+            },
+            Item(Page.LOOK_GLASS, "Preview tint", "frosted key preview bubble popup tint opacity clear see through frosted", visible = { KbTheme.current(this).isGlass }) {
+                ui.slider("Preview tint", 10, 90, "preview_blur_tint", 43, listOf("Clear" to 25, "Standard" to 43, "Frosted" to 70), unit = "%") { }
+            },
             Item(Page.LOOK_KEYS, "Key preview", "popup bubble character magnify") {
                 ui.toggle("Key preview", "Floating character bubble above the pressed key", "keypreview", true)
             },
@@ -707,7 +713,7 @@ class SettingsActivity : Activity() {
                 "haptic_slide", "sound", "sound_style", "sound_vol"),
             Page.LOOK_THEME to listOf(KbTheme.PREF, "mode"),
             Page.LOOK_COLOR to listOf("preset", "accent_v2", "dynamic", "hue", "accent_style", "tritone"),
-            Page.LOOK_GLASS to listOf("blur", "blur_tint", "blur_radius", "key_alpha", "refract", "lens", "preview_blur"),
+            Page.LOOK_GLASS to listOf("blur", "blur_tint", "blur_radius", "key_alpha", "refract", "lens", "preview_blur", "preview_blur_amt", "preview_blur_tint"),
             Page.LOOK_KEYS to listOf("keypreview", "key_h", "key_h_land") + KbTheme.values().flatMap { listOf(it.keyRKey, it.keyGapKey) },
             Page.LOOK_FX to listOf(TapEffect.PREF, TapEffect.COLOR_PREF, BackEffect.PREF),
         )

@@ -5,6 +5,7 @@ import android.animation.ValueAnimator
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.res.Resources
+import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.drawable.Drawable
@@ -68,7 +69,7 @@ private fun morphFromKey(face: View, lens: LensView?, bw: Int, bh: Int, kw: Int,
  * One reusable floating character preview per keyboard (never one window per key).
  * Shown after the key has already been committed, so it can never delay typing.
  */
-class KeyPreview(ctx: Context, private val t: KbTokens) {
+class KeyPreview(private val ctx: Context, private val t: KbTokens) {
     private val motionOn = animationsOn(ctx)
     private val bubble = TextView(ctx).apply {
         gravity = Gravity.CENTER
@@ -79,58 +80,154 @@ class KeyPreview(ctx: Context, private val t: KbTokens) {
         background = t.popupBackground()
         elevation = t.popupElevation
     }
-    // ---- frosted preview: a tiny capture of the keyboard under the bubble, softened on the CPU (a few hundred pixels),
-    // drawn stretched and clipped to the bubble, with the key tone over it. No RenderEffect and no extra view, so nothing
-    // can render half-way while the bubble springs up from the key. ----
+    // ---- frosted preview, live: a tiny capture of the keyboard under the bubble, blurred on the CPU, drawn stretched and
+    // clipped to the bubble with the key tone over it. While the bubble is up the capture is redone whenever the keyboard
+    // window really redrew (capped at ~33 per second), into reused buffers: no allocation per frame, no RenderEffect, no
+    // extra view, so nothing can render half-way while the bubble springs up from the key. ----
     private val frostOn = android.os.Build.VERSION.SDK_INT >= 31 && t.isGlass && Prefs.bool(ctx, "preview_blur", true)
     private val solidBg: Drawable = bubble.background
-    private val frost: FrostDrawable? = if (frostOn)
-        FrostDrawable(GlassSurfaceDrawable(t, t.popupRadius, ColorUtils.setAlphaComponent(t.key, 0x6E), GlassSurfaceDrawable.Style.FLOATING, useShader = false), t.popupRadius)
-        else null
+    private var frostTint = -1
+    private var frost: FrostDrawable? = null
+
+    /** The frosted background; rebuilt only when the tint slider (Settings > Frosted key preview) changed, so it applies on the next press. */
+    private fun frostFor(): FrostDrawable? {
+        if (!frostOn) return null
+        val pct = Prefs.int(ctx, "preview_blur_tint", 43).coerceIn(10, 100)
+        if (frost == null || pct != frostTint) {
+            frostTint = pct
+            frost = FrostDrawable(GlassSurfaceDrawable(t, t.popupRadius, ColorUtils.setAlphaComponent(t.key, pct * 255 / 100), GlassSurfaceDrawable.Style.FLOATING, useShader = false), t.popupRadius)
+        }
+        return frost
+    }
+
+    private var fRoot: View? = null
+    private var fLeft = 0; private var fTop = 0; private var fW = 1; private var fH = 1
+    private var fBlurDp = 5
+    private var fBmp: Bitmap? = null
+    private var fCanvas: Canvas? = null
+    private var fA = IntArray(0)
+    private var fB = IntArray(0)
+    private var fDirty = false
+    private var fLive = false
+    private var fLastNs = 0L
+    private var fObs: android.view.ViewTreeObserver? = null
+    private val fDraw = android.view.ViewTreeObserver.OnDrawListener { fDirty = true }
+    private val fTick = Choreographer.FrameCallback { ns -> frostTick(ns) }
 
     /**
-     * Draws the keyboard window's patch under the bubble (screen rect [left], [top], [w] x [h]) into a quarter-size bitmap
-     * (only the views that intersect the patch are drawn), blurs it and hands it to [frost]. Any failure leaves the plain bubble.
+     * First capture of a press: the keyboard window's patch under the bubble (screen rect [left], [top], [w] x [h]).
+     * Returns false (plain bubble) when frost is off or the capture fails.
      */
     private fun captureFrost(key: View, left: Int, top: Int, w: Int, h: Int): Boolean {
-        val fr = frost ?: return false
+        val fr = frostFor() ?: return false
+        fRoot = key.rootView
+        fLeft = left; fTop = top; fW = w.coerceAtLeast(1); fH = h.coerceAtLeast(1)
+        fBlurDp = Prefs.int(ctx, "preview_blur_amt", 5).coerceIn(0, 16)
+        return grabFrost(fr)
+    }
+
+    /** One capture + blur into the reused bitmap. Only the views that intersect the patch are drawn. */
+    private fun grabFrost(fr: FrostDrawable): Boolean {
+        val root = fRoot ?: return false
         return try {
-            val root = key.rootView
+            val div = if (fBlurDp <= 8) 4 else 8
+            val bw = (fW / div).coerceAtLeast(8)
+            val bh = (fH / div).coerceAtLeast(8)
+            var bmp = fBmp
+            var c = fCanvas
+            if (bmp == null || c == null || bmp.width != bw || bmp.height != bh) {
+                bmp = Bitmap.createBitmap(bw, bh, Bitmap.Config.ARGB_8888)
+                c = Canvas(bmp)
+                fBmp = bmp; fCanvas = c
+                fA = IntArray(bw * bh); fB = IntArray(bw * bh)
+            }
             val rl = IntArray(2); root.getLocationOnScreen(rl)
-            val bw = (w / 4).coerceAtLeast(8)
-            val bh = (h / 4).coerceAtLeast(8)
-            val bmp = android.graphics.Bitmap.createBitmap(bw, bh, android.graphics.Bitmap.Config.ARGB_8888)
             bmp.eraseColor(t.background or 0xFF000000.toInt())          // where the patch sticks out of the window: the shell tone, never black
-            val c = Canvas(bmp)
-            c.scale(bw.toFloat() / w, bh.toFloat() / h)
-            c.translate((rl[0] - left).toFloat(), (rl[1] - top).toFloat())
+            val save = c.save()
+            c.scale(bw.toFloat() / fW, bh.toFloat() / fH)
+            c.translate((rl[0] - fLeft).toFloat(), (rl[1] - fTop).toFloat())
             root.draw(c)
-            fr.setBackdrop(softened(bmp))
+            c.restoreToCount(save)
+            bmp.getPixels(fA, 0, bw, 0, 0, bw, bh)
+            // blur "radius" = sigma in dp (like RenderEffect); a box radius of ~1.14 sigma, two passes, at 1/div size
+            val r = Math.round(fBlurDp * ctx.resources.displayMetrics.density / div / 0.88f).coerceIn(0, 6)
+            if (r > 0) repeat(2) { boxH(fA, fB, bw, bh, r); boxV(fB, fA, bw, bh, r) }
+            bmp.setPixels(fA, 0, bw, 0, 0, bw, bh)
+            fr.setBackdrop(bmp)
             true
         } catch (_: Throwable) { false }
     }
 
-    /** Two 3x3 box-blur passes over a bitmap of a few hundred pixels: cheap, and the stretch on draw smooths it further. */
-    private fun softened(bmp: android.graphics.Bitmap): android.graphics.Bitmap {
-        val w = bmp.width; val h = bmp.height
-        var src = IntArray(w * h); bmp.getPixels(src, 0, w, 0, 0, w, h)
-        var dst = IntArray(w * h)
-        repeat(2) {
-            for (y in 0 until h) for (x in 0 until w) {
-                var r = 0; var g = 0; var b = 0
-                for (dy in -1..1) {
-                    val yy = (y + dy).coerceIn(0, h - 1)
-                    for (dx in -1..1) {
-                        val p = src[yy * w + (x + dx).coerceIn(0, w - 1)]
-                        r += (p shr 16) and 255; g += (p shr 8) and 255; b += p and 255
-                    }
-                }
-                dst[y * w + x] = (0xFF shl 24) or ((r / 9) shl 16) or ((g / 9) shl 8) or (b / 9)
+    /** Horizontal box blur, clamped edges, running sums: O(pixels) whatever the radius. */
+    private fun boxH(s: IntArray, d: IntArray, w: Int, h: Int, r: Int) {
+        val n = 2 * r + 1
+        for (y in 0 until h) {
+            val o = y * w
+            var sr = 0; var sg = 0; var sb = 0
+            for (i in -r..r) {
+                val p = s[o + i.coerceIn(0, w - 1)]
+                sr += (p shr 16) and 255; sg += (p shr 8) and 255; sb += p and 255
             }
-            val swap = src; src = dst; dst = swap
+            for (x in 0 until w) {
+                d[o + x] = (0xFF shl 24) or ((sr / n) shl 16) or ((sg / n) shl 8) or (sb / n)
+                val a = s[o + minOf(x + r + 1, w - 1)]
+                val b = s[o + maxOf(x - r, 0)]
+                sr += ((a shr 16) and 255) - ((b shr 16) and 255)
+                sg += ((a shr 8) and 255) - ((b shr 8) and 255)
+                sb += (a and 255) - (b and 255)
+            }
         }
-        bmp.setPixels(src, 0, w, 0, 0, w, h)
-        return bmp
+    }
+
+    /** Vertical twin of [boxH]. */
+    private fun boxV(s: IntArray, d: IntArray, w: Int, h: Int, r: Int) {
+        val n = 2 * r + 1
+        for (x in 0 until w) {
+            var sr = 0; var sg = 0; var sb = 0
+            for (i in -r..r) {
+                val p = s[i.coerceIn(0, h - 1) * w + x]
+                sr += (p shr 16) and 255; sg += (p shr 8) and 255; sb += p and 255
+            }
+            for (y in 0 until h) {
+                d[y * w + x] = (0xFF shl 24) or ((sr / n) shl 16) or ((sg / n) shl 8) or (sb / n)
+                val a = s[minOf(y + r + 1, h - 1) * w + x]
+                val b = s[maxOf(y - r, 0) * w + x]
+                sr += ((a shr 16) and 255) - ((b shr 16) and 255)
+                sg += ((a shr 8) and 255) - ((b shr 8) and 255)
+                sb += (a and 255) - (b and 255)
+            }
+        }
+    }
+
+    /** Starts following the keyboard window: any redraw of it marks the frost dirty, and the next frame recaptures. */
+    private fun frostStart() {
+        val root = fRoot ?: return
+        val o = root.viewTreeObserver
+        if (!o.isAlive) return
+        if (fLive && fObs === o) return
+        frostStop()
+        o.addOnDrawListener(fDraw)
+        fObs = o
+        fLive = true; fDirty = false
+        Choreographer.getInstance().postFrameCallback(fTick)
+    }
+
+    private fun frostStop() {
+        if (!fLive) return
+        fLive = false
+        Choreographer.getInstance().removeFrameCallback(fTick)
+        fObs?.let { if (it.isAlive) it.removeOnDrawListener(fDraw) }
+        fObs = null
+    }
+
+    private fun frostTick(ns: Long) {
+        if (!fLive) return
+        if (fRoot?.isAttachedToWindow != true) { frostStop(); return }
+        if (fDirty && ns - fLastNs >= 30_000_000L) {
+            fDirty = false; fLastNs = ns
+            frost?.let { grabFrost(it) }
+        }
+        Choreographer.getInstance().postFrameCallback(fTick)
     }
 
     /** Opt-in (Settings > Liquid lens, off by default: it re-renders the keyboard window per press and lags): a liquid-glass bubble that bends the keys around it. Otherwise the plain frosted bubble above: a near-opaque key-tone tint with a soft top light, hairline and shadow, no per-frame backdrop work. */
@@ -254,6 +351,7 @@ class KeyPreview(ctx: Context, private val t: KbTokens) {
         val geomChanged = Math.abs(oldX - stageX) > 2 || Math.abs(oldY - stageY) > 2 || Math.abs(oldW - stageW) > 2 || Math.abs(oldH - stageH) > 2
         bubble.text = glyph
         val useFrost = !useLens && captureFrost(key, bx, loc[1] + 2.dp - bh, bw, bh)
+        if (useFrost) frostStart() else frostStop()
         val wantBg: Drawable? = if (useFrost) frost else solidBg
         if (wantBg != null && bubble.background !== wantBg) bubble.background = wantBg
         if (useLens) lens?.aim(key, glyph)
@@ -339,6 +437,7 @@ class KeyPreview(ctx: Context, private val t: KbTokens) {
     /** Quick fade-out unless [immediate]; a new [show] cancels the fade, so rolling typing never flickers. */
     fun dismiss(immediate: Boolean = false) {
         owner = null
+        frostStop()
         if (pendingReveal && !immediate) { releasedEarly = true; return }     // the bubble is still on its way: it fades once it has appeared
         pendingReveal = false; releasedEarly = false
         moveSeq++
