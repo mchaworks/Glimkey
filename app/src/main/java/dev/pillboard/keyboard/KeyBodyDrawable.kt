@@ -19,7 +19,11 @@ import android.graphics.drawable.Drawable
  * edges bow outward a little, like a soft pillow / flexible material. At rest it is a plain
  * rounded rect. One Path and one Paint, reused every frame; no bitmaps.
  */
+/** Settings > Appearance > Key depth, 0..1: how far flat keys lift off the shell (a soft shadow under each key). Set by KbTokens. */
+@Volatile internal var keyDepthGlobal = 0f
+
 internal class KeyBodyDrawable : Drawable() {
+    private val depthPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val path = Path()
     private val rect = RectF()
@@ -105,6 +109,14 @@ internal class KeyBodyDrawable : Drawable() {
             for (i in 0 until 8) radii[i] = radii[i].coerceIn(0f, maxR)
             path.addRoundRect(rect, radii, Path.Direction.CW)
         } else organic(rect, minOf(radii[0], maxR), minOf(radii[2], maxR), minOf(radii[4], maxR), minOf(radii[6], maxR), bulge)
+        val dp = keyDepthGlobal
+        if (dp > 0f && Color.alpha(c0) > 0) {
+            val d = dens
+            val sv = canvas.save()
+            canvas.translate(0f, (1.2f + 1.8f * dp) * d); depthPaint.color = Color.argb((10 + 26 * dp).toInt(), 0, 0, 0); canvas.drawPath(path, depthPaint)
+            canvas.translate(0f, -(0.7f + 1.0f * dp) * d); depthPaint.color = Color.argb((14 + 34 * dp).toInt(), 0, 0, 0); canvas.drawPath(path, depthPaint)
+            canvas.restoreToCount(sv)
+        }
         canvas.drawPath(path, paint)
     }
 

@@ -97,7 +97,7 @@ class KeyPreview(private val ctx: Context, private val t: KbTokens) {
         val pct = Prefs.int(ctx, "preview_blur_tint", 43).coerceIn(10, 100)
         if (frost == null || pct != frostTint) {
             frostTint = pct
-            frost = FrostDrawable(GlassSurfaceDrawable(t, t.popupRadius, ColorUtils.setAlphaComponent(t.key, pct * 255 / 100), GlassSurfaceDrawable.Style.FLOATING, useShader = false), t.popupRadius, ColorUtils.compositeColors(ColorUtils.setAlphaComponent(t.key, 0x70), ColorUtils.setAlphaComponent(t.background, 0xFF)))
+            frost = FrostDrawable(GlassSurfaceDrawable(t, t.popupRadius, ColorUtils.setAlphaComponent(t.key, pct * 255 / 100), GlassSurfaceDrawable.Style.FLOATING, useShader = false), t.popupRadius, ColorUtils.setAlphaComponent(t.key, 0xD8))
         }
         return frost
     }

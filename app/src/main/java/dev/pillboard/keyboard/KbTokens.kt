@@ -116,6 +116,7 @@ class KbTokens(ctx0: Context, val theme: KbTheme = KbTheme.current(ctx0)) {
     val glassHighlight = p?.let { ColorUtils.setAlphaComponent(it.keyText, 0x40) } ?: ColorUtils.setAlphaComponent(Color.WHITE, if (night) 0x24 else 0x66)
     /** Liquid Glass keycap opacity (Settings > Appearance > Glass & blur > Key opacity): below 100% the keys are glass too and the blur shows through them. */
     private val keyAlpha = if (isGlass) Prefs.int(ctx, "key_alpha", 100).coerceIn(30, 100) * 255 / 100 else 255
+    val keyDepth: Float = (if (isGlass) Prefs.int(ctx, "key_depth", 0).coerceIn(0, 100) / 100f else 0f).also { keyDepthGlobal = it }
     private fun ka(c: Int) = if (keyAlpha >= 255) c else ColorUtils.setAlphaComponent(c, keyAlpha)
     private val keyBase = p?.key ?: seedTri?.takeIf { night }?.let { ColorUtils.blendARGB(0xFF3C3C42.toInt(), it.pc, 0.20f) } ?: if (night) tone(c(MR.attr.colorSurfaceContainerHighest, 0xFF36343B.toInt()), Color.WHITE, 0.10f)
               else c(MR.attr.colorSurfaceContainerLowest, Color.WHITE)

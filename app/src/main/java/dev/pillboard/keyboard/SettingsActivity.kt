@@ -184,6 +184,7 @@ class SettingsActivity : Activity() {
             },
             Item(Page.LOOK_GLASS, "Key opacity", "glass keys keycap transparent translucent see through blur clear frosted solid", group = "Keys and edge", visible = { KbTheme.current(this).isGlass }) {
                 ui.slider("Key opacity", 30, 100, "key_alpha", 100, listOf("Clear" to 45, "Frosted" to 70, "Solid" to 100), unit = "%") { refreshPreview() }
+                ui.slider("Key depth", 0, 100, "key_depth", 0, listOf("Flat" to 0, "Soft" to 40, "Raised" to 80), unit = "%") { refreshPreview() }
             },
             Item(Page.LOOK_GLASS, "Liquid refraction", "glass refraction edge bevel dispersion bend background shell", group = "Keys and edge", visible = { KbTheme.current(this).isGlass }) {
                 ui.toggle("Liquid refraction",
@@ -742,7 +743,7 @@ class SettingsActivity : Activity() {
                 "haptic_slide", "sound", "sound_style", "sound_vol"),
             Page.LOOK_THEME to listOf(KbTheme.PREF, "mode"),
             Page.LOOK_COLOR to listOf("preset", "accent_v2", "dynamic", "hue", "accent_style", "tritone"),
-            Page.LOOK_GLASS to listOf("blur", "blur_tint", "blur_radius", "key_alpha", "refract", "lens", "preview_blur", "preview_blur_amt", "preview_blur_tint"),
+            Page.LOOK_GLASS to listOf("blur", "blur_tint", "blur_radius", "key_alpha", "key_depth", "refract", "lens", "preview_blur", "preview_blur_amt", "preview_blur_tint"),
             Page.LOOK_KEYS to listOf("keypreview", "key_h", "key_h_land") + KbTheme.values().flatMap { listOf(it.keyRKey, it.keyGapKey) },
             Page.LOOK_FX to listOf(TapEffect.PREF, TapEffect.COLOR_PREF, BackEffect.PREF, "glass_fx", "blur_text_lite"),
         )
