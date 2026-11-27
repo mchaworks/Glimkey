@@ -125,7 +125,7 @@ class KbTokens(ctx0: Context, val theme: KbTheme = KbTheme.current(ctx0)) {
      */
     val frostKeys = isGlass && skin == KeySkin.FLAT && keyAlpha < 255
     /** Rim light of a frosted key: bright at the top-left edge, fading out toward the bottom-right. */
-    val keyRim = if (!frostKeys) Color.TRANSPARENT else ColorUtils.setAlphaComponent(Color.WHITE, if (night) 0x55 else 0xC8)
+    val keyRim = if (!frostKeys) Color.TRANSPARENT else ColorUtils.setAlphaComponent(Color.WHITE, if (night) 0x26 else 0x58)
     private val keyBase = p?.key ?: seedTri?.takeIf { night }?.let { ColorUtils.blendARGB(0xFF3C3C42.toInt(), it.pc, 0.20f) } ?: if (night) tone(c(MR.attr.colorSurfaceContainerHighest, 0xFF36343B.toInt()), Color.WHITE, 0.10f)
               else c(MR.attr.colorSurfaceContainerLowest, Color.WHITE)
     val key = ka(keyBase)
@@ -190,7 +190,7 @@ class KbTokens(ctx0: Context, val theme: KbTheme = KbTheme.current(ctx0)) {
         KeySkin.CLAY -> intArrayOf(lift(base, if (night) 0.05f else 0.35f), tone(base, Color.BLACK, if (night) 0.06f else 0.04f))
         // frosted glass key: a lighter top fading into the body (translucent keys only; Enter / active Shift stay flat)
         else -> if (frostKeys && Color.alpha(base) < 255)
-            intArrayOf(lift(base, if (night) 0.10f else 0.60f), base)
+            intArrayOf(lift(base, if (night) 0.04f else 0.16f), base)
         else intArrayOf(base, base)
     }
 

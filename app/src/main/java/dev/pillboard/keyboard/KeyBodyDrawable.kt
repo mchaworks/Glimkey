@@ -120,7 +120,7 @@ internal class KeyBodyDrawable : Drawable() {
         val k = rim.toLong() * 31 + rect.left.toBits() * 7L + rect.top.toBits() * 13L + rect.right.toBits() + rect.bottom.toBits() * 3L
         if (k != rimShaderFor) {
             rimShaderFor = k
-            val faint = Color.argb(Color.alpha(rim) / 4, Color.red(rim), Color.green(rim), Color.blue(rim))
+            val faint = Color.argb(Color.alpha(rim) / 6, Color.red(rim), Color.green(rim), Color.blue(rim))
             rimPaint.shader = LinearGradient(rect.left, rect.top, rect.right, rect.bottom,
                 intArrayOf(rim, Color.argb(0, Color.red(rim), Color.green(rim), Color.blue(rim)), faint),
                 floatArrayOf(0f, 0.55f, 1f), Shader.TileMode.CLAMP)
