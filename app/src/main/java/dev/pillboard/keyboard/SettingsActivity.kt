@@ -341,7 +341,13 @@ class SettingsActivity : Activity() {
         searchBar.post { (searchBar as? GlassBar)?.pulse(900) }
         if (savedInstanceState != null) {
             // recreated (accent / mode changed): fade in instead of flashing, and stay where the person was scrolled
-            rootCol.alpha = 0f; rootCol.animate().alpha(1f).setDuration(180).start()
+            // the glass capsule samples the page under it: while the page is still transparent it would capture a dark grey, so it
+            // stays hidden through the fade and glasses in once the page is solid
+            val home = page == Page.HOME
+            rootCol.alpha = 0f; if (home) searchBar.alpha = 0f
+            rootCol.animate().alpha(1f).setDuration(180).withEndAction {
+                if (home) { searchBar.animate().alpha(1f).setDuration(160).start(); (searchBar as? GlassBar)?.pulse(900) }
+            }.start()
             val y = savedInstanceState.getInt("scrollY", 0)
             if (y > 0) scroll.doOnLayout { it.scrollTo(0, y) }
         }
