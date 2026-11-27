@@ -259,6 +259,7 @@ class PillboardService : InputMethodService() {
     override fun onStartInputView(info: EditorInfo?, restarting: Boolean) {
         super.onStartInputView(info, restarting)
         KbMode.appNight = KbMode.forApp(info?.packageName)
+        applyPadding()      // Settings > Layout > Bottom spacing
         val rebuild = KbMode.night(this) != builtNight || Prefs.dynamic(this) != builtDynamic || Prefs.seedColor(this) != builtSeed || BackEffect.pressGlow(this) != builtFx || KbTheme.current(this) != builtTheme ||
             KbMode.pref(this) != builtMode || Prefs.bool(this, "tritone", true) != builtTri || Prefs.accentStyle(this) != builtStyle || Prefs.int(this, "blur_tint", 62) != builtTint
         // The app restarted input on the SAME field (many apps do when the field is cleared or the send button changes):
@@ -324,7 +325,10 @@ class PillboardService : InputMethodService() {
     }
 
     private fun applyPadding() {
-        root?.setPadding(7.dp, 8.dp, 7.dp, 8.dp + navInset)
+        // one-handed mode: the keyboard hugs one side and leaves the other ~22% of the screen free
+        val free = (resources.displayMetrics.widthPixels * 0.22f).toInt()
+        val (l, r) = when (Prefs.str(this, "onehand", "off")) { "left" -> 0 to free; "right" -> free to 0; else -> 0 to 0 }
+        root?.setPadding(7.dp + l, 8.dp, 7.dp + r, 8.dp + navInset + Prefs.int(this, "bottom_pad", 0).dp)
     }
 
     private fun blurSupported() = Build.VERSION.SDK_INT >= 31 &&
@@ -1607,6 +1611,7 @@ class PillboardService : InputMethodService() {
         StripFeature.CLIPBOARD -> openPanel(Panel.CLIPBOARD)
         StripFeature.TEXT_EDIT -> openPanel(Panel.EDIT)
         StripFeature.EMOJI -> setEmoji(true)
+        StripFeature.REPEAT -> repeatLast()
         StripFeature.SETTINGS -> openApp()
     }
 
@@ -2059,7 +2064,8 @@ class PillboardService : InputMethodService() {
      * (landscape, split-screen, short displays).
      */
     private fun keyHeight(): Int {
-        val pref = Prefs.int(this, "key_h", 50).dp
+        val land = resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+        val pref = (if (land) Prefs.int(this, "key_h_land", 42) else Prefs.int(this, "key_h", 50)).dp
         val rows = 4f + (if (Prefs.bool(this, "numrow", false) && !symbols) 0.8f else 0f)
         val stripH = if (translateMode) trDockH + 3.dp else if (Prefs.bool(this, "suggest", true) || Prefs.bool(this, "translate", false)) 45.dp else 0
         val budget = resources.displayMetrics.heightPixels * 0.55f - stripH - 16.dp - navInset
@@ -2389,6 +2395,7 @@ class PillboardService : InputMethodService() {
             val needSpace = next == null || !(next.isWhitespace() || next in ".,!?;:)]}")
             ic.deleteSurroundingText(c.word.length, k)
             ic.commitText(if (needSpace) "${cand.text} " else cand.text, 1)
+            lineBuf.setLength((lineBuf.length - c.word.length).coerceAtLeast(0)); lineBuf.append(if (needSpace) "${cand.text} " else cand.text)
         }
         // tapping the quoted literal means "this is a real word": remember it with extra weight
         if (learningAllowed()) Suggestions.learn(c, cand.text, if (cand.kind == SuggestCore.Kind.LITERAL) 2f else 1f)
@@ -2402,6 +2409,7 @@ class PillboardService : InputMethodService() {
         lastFix = null
         val code = if (n < 0) KeyEvent.KEYCODE_DPAD_LEFT else KeyEvent.KEYCODE_DPAD_RIGHT
         repeat(Math.abs(n)) { sendDownUpKeyEvents(code) }
+        if (Prefs.bool(this, "haptic_slide", true)) Haptics.play(this, android.view.HapticFeedbackConstants.CLOCK_TICK)
         updateStrip()
         refreshLoupe()
     }
@@ -2443,9 +2451,22 @@ class PillboardService : InputMethodService() {
 
     private fun statsOn() = Prefs.bool(this, TypingStats.PREF, true) && !emojiSearch && learningAllowed()
 
+    // the line being typed, and the last finished one (Enter), for the "Repeat last line" strip feature
+    private val lineBuf = StringBuilder()
+    private var lastLine = ""
+
+    private fun repeatLast() {
+        if (lastLine.isEmpty() || emojiSearch) return
+        lastFix = null
+        currentInputConnection?.commitText(lastLine, 1)
+        lineBuf.append(lastLine)
+        afterEdit()
+    }
+
     private fun type(s: String) {
         if (emojiSearch) { query.append(s.lowercase()); updateSearchBar(); return }
         lastFix = null
+        lineBuf.append(s)
         // punctuation ends a word: learn it before the mark goes in
         if (s.length == 1 && !s[0].isLetterOrDigit() && s[0] != '\'' && s[0] != '’' &&
             currentInputConnection?.let { !midWord(it) } != false) learnWord(suggestionCtx())
@@ -2465,6 +2486,7 @@ class PillboardService : InputMethodService() {
             afterEdit(); return
         }
         if (statsOn()) TypingStats.delete(this)
+        if (lineBuf.isNotEmpty()) lineBuf.setLength(lineBuf.length - 1)
         sendDownUpKeyEvents(KeyEvent.KEYCODE_DEL)
         afterEdit()
     }
@@ -2486,8 +2508,11 @@ class PillboardService : InputMethodService() {
         if (Prefs.bool(this, "dblspace", true) && rewriteAllowed() && before.length == 2 && before[1] == ' ' && before[0].isLetterOrDigit()) {
             ic.deleteSurroundingText(1, 0)
             ic.commitText(". ", 1)
+            if (lineBuf.isNotEmpty()) lineBuf.setLength(lineBuf.length - 1)
+            lineBuf.append(". ")
         } else {
             ic.commitText(" ", 1)
+            lineBuf.append(' ')
         }
         afterEdit()
     }
@@ -2497,6 +2522,7 @@ class PillboardService : InputMethodService() {
         val out = Suggestions.autoCorrection(c) ?: return false
         ic.deleteSurroundingText(c.word.length, 0)
         ic.commitText("$out ", 1)
+        lineBuf.setLength((lineBuf.length - c.word.length).coerceAtLeast(0)); lineBuf.append("$out ")
         lastFix = c.word to "$out "
         if (learningAllowed()) Suggestions.learn(c, out)
         return true
@@ -2506,6 +2532,8 @@ class PillboardService : InputMethodService() {
         if (emojiSearch) { setEmoji(true); return }
         learnWord(suggestionCtx())
         lastFix = null
+        if (lineBuf.isNotBlank()) lastLine = lineBuf.toString().trim()
+        lineBuf.setLength(0)
         if (!sendDefaultEditorAction(true)) sendDownUpKeyEvents(KeyEvent.KEYCODE_ENTER)
         afterEdit()
     }

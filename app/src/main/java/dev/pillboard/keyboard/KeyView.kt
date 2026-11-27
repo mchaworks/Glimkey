@@ -424,7 +424,7 @@ class KeyView(
             onKey()
             if (++repeatCount % 2 == 0) keyHaptic(HapticFeedbackConstants.CLOCK_TICK)   // 90 ms apart: closer than this the ticks blur into a buzz
             if (repeatCount % 2 == 0) keySound(soundLabel)
-            postDelayed(this, 45)
+            postDelayed(this, Prefs.int(context, "repeat_ms", 45).toLong())
         }
     }
     private val longPress = Runnable { showAlts() }
@@ -796,7 +796,7 @@ class KeyView(
                 downX = e.x
                 // 1) input first: nothing visual may ever sit in front of the commit
                 if (repeats) {
-                    repeatCount = 0; onKey(); postDelayed(repeater, 400)
+                    repeatCount = 0; onKey(); postDelayed(repeater, Prefs.int(context, "repeat_delay", 400).toLong())
                 } else {
                     val hinting = hintChar != null
                     alts = if (hinting) emptyList() else altsFor?.invoke(text.toString()) ?: emptyList()
@@ -804,7 +804,7 @@ class KeyView(
                         onSlide != null -> { pendingUp = true; downX = e.x }   // types on release unless it became a slide
                         hinting -> { pendingUp = true; postDelayed(hintFire, 300) }   // letter on release, hint if held
                         alts.isEmpty() -> onKey()
-                        else -> { pendingUp = true; postDelayed(longPress, 350) }
+                        else -> { pendingUp = true; postDelayed(longPress, Prefs.int(context, "longpress_ms", 350).toLong()) }
                     }
                 }
                 if (pendingUp) pendingKey = java.lang.ref.WeakReference(this)

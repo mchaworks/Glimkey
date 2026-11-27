@@ -59,6 +59,46 @@ object Prefs {
         "Graphite" to 0xFF757575.toInt(),
     )
     fun clear(c: Context) = sp(c).edit().clear().apply()
+    /** Back to default: drop the stored values of [keys] (Settings > any page > Reset this page). */
+    fun remove(c: Context, keys: Collection<String>) { val e = sp(c).edit(); keys.forEach { e.remove(it) }; e.apply() }
+
+    /** Settings backup: every preference except the typing-stat counters, as JSON with the value type kept ("t"). */
+    fun exportJson(c: Context): String {
+        val out = org.json.JSONObject()
+        for ((k, v) in sp(c).all) {
+            if (k.startsWith("st_")) continue
+            val (t, value) = when (v) {
+                is Boolean -> "b" to v
+                is Int -> "i" to v
+                is Long -> "l" to v
+                is Float -> "f" to v.toDouble()
+                is String -> "s" to v
+                else -> continue
+            }
+            out.put(k, org.json.JSONObject().put("t", t).put("v", value))
+        }
+        return out.toString()
+    }
+
+    /** Restores [exportJson]; returns how many settings were applied, or -1 when the text is not a Glimkey backup. */
+    fun importJson(c: Context, json: String): Int = try {
+        val o = org.json.JSONObject(json)
+        val e = sp(c).edit()
+        var n = 0
+        for (k in o.keys()) {
+            val item = o.optJSONObject(k) ?: continue
+            when (item.optString("t")) {
+                "b" -> e.putBoolean(k, item.getBoolean("v"))
+                "i" -> e.putInt(k, item.getInt("v"))
+                "l" -> e.putLong(k, item.getLong("v"))
+                "f" -> e.putFloat(k, item.getDouble("v").toFloat())
+                "s" -> e.putString(k, item.getString("v"))
+                else -> continue
+            }
+            n++
+        }
+        if (n == 0) -1 else { e.apply(); n }
+    } catch (_: Exception) { -1 }
 }
 
 /** Key haptics: see [Haptics] (style, strength, release tick); the in-app toggle is honoured there. */

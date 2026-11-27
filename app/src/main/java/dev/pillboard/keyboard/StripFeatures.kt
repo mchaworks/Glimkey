@@ -8,6 +8,7 @@ internal enum class StripFeature(val id: String, val label: String, val icon: In
     CLIPBOARD("clipboard", "Clipboard", R.drawable.ic_clipboard),
     TEXT_EDIT("text_edit", "Text editing", R.drawable.ic_text_edit),
     EMOJI("emoji", "Emoji", R.drawable.ic_emoji),
+    REPEAT("repeat", "Repeat last line", R.drawable.ic_redo),
     SETTINGS("settings", "Settings", R.drawable.ic_settings);
 
     companion object {
@@ -15,6 +16,7 @@ internal enum class StripFeature(val id: String, val label: String, val icon: In
         fun available(c: Context): List<StripFeature> =
             values().filter {
                 (it != TRANSLATE || Prefs.bool(c, "translate", false)) &&
+                (it != REPEAT || Prefs.bool(c, "repeat_last", false)) &&
                 (it != EMOJI || (Prefs.bool(c, "emoji", true) && Prefs.str(c, "emoji_pos", "capsule") == "capsule"))
             }
 

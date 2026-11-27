@@ -36,7 +36,7 @@ class SettingsActivity : Activity() {
 
     private enum class Page(val label: String, val sub: String, val icon: Int = 0, val tile: Int = 0, val parent: Page? = null) {
         HOME("Glimkey", ""),
-        TYPING("Typing", "Suggestions, learning, auto-correction, capitalization", R.drawable.ic_set_typing, 0xFF0A84FF.toInt()),
+        TYPING("Typing", "Suggestions, learning, auto-correction, touch timing", R.drawable.ic_set_typing, 0xFF0A84FF.toInt()),
         TRANSLATE("Translation", "Online translate, target language", R.drawable.ic_translate, 0xFF32ADE6.toInt()),
         APPEARANCE("Appearance", "Theme, colors, glass, keys, effects", R.drawable.ic_set_look, 0xFFBF5AF2.toInt()),
         LOOK_THEME("Theme & mode", "Keyboard theme, light / dark", R.drawable.ic_set_look, 0xFFBF5AF2.toInt(), parent = APPEARANCE),
@@ -44,9 +44,9 @@ class SettingsActivity : Activity() {
         LOOK_GLASS("Glass & blur", "Backdrop blur, tint, refraction, lens", R.drawable.ic_set_look, 0xFF32ADE6.toInt(), parent = APPEARANCE),
         LOOK_KEYS("Keys", "Height, shape, spacing, key preview", R.drawable.ic_set_layout, 0xFFFF9F0A.toInt(), parent = APPEARANCE),
         LOOK_FX("Effects", "Tap effect, back effect, effect color", R.drawable.ic_set_feedback, 0xFF30B650.toInt(), parent = APPEARANCE),
-        LAYOUT("Layout", "Layout style, number row, emoji key, strip button", R.drawable.ic_set_layout, 0xFFFF9F0A.toInt()),
+        LAYOUT("Layout", "Layout style, number row, emoji key, bottom spacing", R.drawable.ic_set_layout, 0xFFFF9F0A.toInt()),
         FEEDBACK("Feedback", "Haptics", R.drawable.ic_set_feedback, 0xFF30B650.toInt()),
-        ADVANCED("Advanced", "Learned words, reset, emoji history", R.drawable.ic_set_more, 0xFF8E8E93.toInt()),
+        ADVANCED("Advanced", "Learned words, backup, reset, emoji history", R.drawable.ic_set_more, 0xFF8E8E93.toInt()),
         ABOUT("About", "Version, license, credits", R.drawable.ic_set_info, 0xFF5AB8E8.toInt()),
     }
 
@@ -121,6 +121,18 @@ class SettingsActivity : Activity() {
             Item(Page.TYPING, "Auto-correction", "fix typos undo") { ui.toggle("Auto-correction", "Fix common typos on space, backspace undoes", "autocorrect", true) },
             Item(Page.TYPING, "Space bar cursor", "slide swipe cursor move space") { ui.toggle("Space bar cursor", "Slide on the space bar to move the cursor", "spaceslide", true) },
             Item(Page.TYPING, "Cursor loupe", "magnifier loupe cursor space slide glass zoom") { ui.toggle("Cursor loupe", "Shows a magnifier with the text around the cursor while you slide on the space bar. Never in password fields.", "cursorloupe", true) },
+            Item(Page.TYPING, "Long-press delay", "hold accents alternate characters hint time slow fast ms") {
+                ui.slider("Long-press delay", 200, 600, "longpress_ms", 350, listOf("Fast" to 250, "Standard" to 350, "Slow" to 500), unit = " ms") { }
+            },
+            Item(Page.TYPING, "Backspace repeat delay", "hold backspace delete repeat start wait ms") {
+                ui.slider("Backspace repeat delay", 200, 700, "repeat_delay", 400, listOf("Quick" to 280, "Standard" to 400, "Patient" to 600), unit = " ms") { }
+            },
+            Item(Page.TYPING, "Backspace repeat speed", "hold backspace delete repeat speed interval fast slow ms") {
+                ui.slider("Backspace repeat speed", 20, 120, "repeat_ms", 45, listOf("Fast" to 25, "Standard" to 45, "Slow" to 80), unit = " ms") { }
+            },
+            Item(Page.TYPING, "Repeat last line", "again redo termux command previous enter strip button") {
+                ui.toggle("Repeat last line", "Adds a strip button action that types the last line you sent with Enter again. Pick it under Layout > Strip button", "repeat_last", false) { renderBody() }
+            },
             Item(Page.TRANSLATE, "Translation", "translate online language word bar") {
                 ui.toggle("Translation", "Adds a translate button to the word bar. While translate mode is open, the text of the field you are typing in is sent to the service chosen below. Never used in password fields.", "translate", false) { renderBody() }
             },
@@ -145,6 +157,12 @@ class SettingsActivity : Activity() {
             Item(Page.LAYOUT, "Number row", "digits numbers top") { ui.toggle("Number row", "Show 1–0 above the letters", "numrow", false) { refreshPreview() } },
             Item(Page.LAYOUT, "Key hints", "hint symbol long press hold gboard number punctuation top right") {
                 ui.toggle("Key hints", "A small symbol on each letter key; hold the key to type it. Letters then type on release, and hold no longer shows accents like é", "keyhint", false) { refreshPreview() }
+            },
+            Item(Page.LAYOUT, "One-handed mode", "thumb left right shrink side narrow small phone reach") {
+                ui.cycle("One-handed mode", "onehand", "off", listOf("off" to "Off", "left" to "Keyboard on the left", "right" to "Keyboard on the right")) { }
+            },
+            Item(Page.LAYOUT, "Bottom spacing", "padding gesture bar navigation thumb height lift raise space below") {
+                ui.slider("Bottom spacing", 0, 32, "bottom_pad", 0, listOf("None" to 0, "Small" to 8, "Roomy" to 20)) { }
             },
             Item(Page.LAYOUT, "Strip button", "word bar capsule button feature translate clipboard text editing emoji settings swipe hold shortcut") {
                 val feats = StripFeature.available(this)
@@ -196,6 +214,9 @@ class SettingsActivity : Activity() {
             Item(Page.LOOK_KEYS, "Key height", "size tall short dp") {
                 ui.slider("Key height", 42, 62, "key_h", 50, listOf("Short" to 44, "Standard" to 50, "Tall" to 58)) { refreshPreview() }
             },
+            Item(Page.LOOK_KEYS, "Key height (landscape)", "size tall short dp horizontal sideways rotate") {
+                ui.slider("Key height (landscape)", 30, 62, "key_h_land", 42, listOf("Short" to 36, "Standard" to 42, "Tall" to 50)) { }
+            },
             Item(Page.LOOK_KEYS, "Key shape", "radius corner round square") {
                 ui.slider("Key shape", 2, 20, KbTheme.current(this).keyRKey, KbTheme.current(this).keyRadiusDp, listOf("Square" to 2, "Standard" to KbTheme.current(this).keyRadiusDp, "Round" to 18)) { refreshPreview() }
             },
@@ -211,6 +232,9 @@ class SettingsActivity : Activity() {
             },
             Item(Page.FEEDBACK, "Haptic engine", "vibration haptic engine system advanced primitive no vibration fix", visible = { Prefs.bool(this, "haptic", true) }) {
                 ui.cycle("Haptic engine", "haptic_engine", "system", listOf("system" to "Standard", "advanced" to "Advanced (strength)")) { Haptics.play(this) }
+            },
+            Item(Page.FEEDBACK, "Haptic on cursor slide", "vibration haptic space slide cursor tick move", visible = { Prefs.bool(this, "haptic", true) && Prefs.bool(this, "spaceslide", true) }) {
+                ui.toggle("Haptic on cursor slide", "A faint tick each time the cursor moves while you slide on the space bar", "haptic_slide", true) { if (it) Haptics.play(this, android.view.HapticFeedbackConstants.CLOCK_TICK) }
             },
             Item(Page.FEEDBACK, "Haptic test", "vibration haptic test diagnose debug no vibration not working") {
                 ui.link("Haptic test", "Try each vibration method and see which one your phone feels", chevron = false) { HapticLab.show(this) }
@@ -244,6 +268,22 @@ class SettingsActivity : Activity() {
                 ui.link("Clear learned words", "Forget the words and word pairs the keyboard learned from you", chevron = false) {
                     Suggestions.clearLearned(this)
                     android.widget.Toast.makeText(this, "Learned words cleared", android.widget.Toast.LENGTH_SHORT).show()
+                }
+            },
+            Item(Page.ADVANCED, "Back up settings", "export backup copy save clipboard json transfer") {
+                ui.link("Back up settings", "Copy all your settings to the clipboard as text", chevron = false) {
+                    val cm = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                    cm.setPrimaryClip(android.content.ClipData.newPlainText("Glimkey settings", Prefs.exportJson(this)))
+                    android.widget.Toast.makeText(this, "Settings copied to the clipboard", android.widget.Toast.LENGTH_SHORT).show()
+                }
+            },
+            Item(Page.ADVANCED, "Restore settings", "import restore paste clipboard json transfer") {
+                ui.link("Restore settings", "Paste a backup from the clipboard", chevron = false) {
+                    val cm = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                    val text = cm.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(this)?.toString().orEmpty()
+                    val n = Prefs.importJson(this, text)
+                    if (n < 0) android.widget.Toast.makeText(this, "No Glimkey backup on the clipboard", android.widget.Toast.LENGTH_SHORT).show()
+                    else { android.widget.Toast.makeText(this, "$n settings restored", android.widget.Toast.LENGTH_SHORT).show(); recreate() }
                 }
             },
             Item(Page.ADVANCED, "Reset settings", "default restore") { ui.link("Reset settings", "Return all keyboard settings to default", chevron = false) { confirmReset() } },
@@ -544,6 +584,8 @@ class SettingsActivity : Activity() {
             }
             else -> {
                 body.addView(ui.box(items.filter { it.page == page && it.visible() }.map { it.make() }), ui.lp())
+                if (pageKeys[page] != null) body.addView(ui.box(listOf(
+                    ui.link("Reset this page", "Return only the options on ${page.label} to their defaults", chevron = false) { confirmResetPage() })), ui.lp())
                 if (page == Page.TRANSLATE) body.addView(ui.caption(
                     "Off by default. When it is on, text is sent over the internet only while translate mode is open, to the service you pick. " +
                     "Google uses an unofficial public endpoint that can change or stop working without notice; MyMemory has a small free daily limit; " +
@@ -633,6 +675,34 @@ class SettingsActivity : Activity() {
         MaterialAlertDialogBuilder(this).setTitle(title).setView(wrap)
             .setPositiveButton("Save") { _, _ -> Prefs.setStr(this, key, input.text.toString().trim()); renderBody(animate = true) }
             .setNegativeButton("Cancel", null).show().also { tintDialog(it) }
+    }
+
+    /** Preference keys behind each page, for "Reset this page". */
+    private val pageKeys: Map<Page, List<String>> by lazy {
+        mapOf(
+            Page.TYPING to listOf("suggest", "learn", TypingStats.PREF, "autocap", "dblspace", "autocorrect", "spaceslide", "cursorloupe",
+                "longpress_ms", "repeat_delay", "repeat_ms", "repeat_last"),
+            Page.TRANSLATE to listOf("translate", "tr_provider", "tr_target", "tr_url", "tr_key"),
+            Page.LAYOUT to listOf("layout_style", "fieldaware", "numrow", "keyhint", "emoji", "emoji_pos", "onehand", "bottom_pad", "strip_feature"),
+            Page.FEEDBACK to listOf("haptic", "haptic_strength", "haptic_style", "haptic_engine", "haptic_keytype", "haptic_adaptive", "haptic_release",
+                "haptic_slide", "sound", "sound_style", "sound_vol"),
+            Page.LOOK_THEME to listOf(KbTheme.PREF, "mode"),
+            Page.LOOK_COLOR to listOf("preset", "accent_v2", "dynamic", "hue", "accent_style", "tritone"),
+            Page.LOOK_GLASS to listOf("blur", "blur_tint", "refract", "lens"),
+            Page.LOOK_KEYS to listOf("keypreview", "key_h", "key_h_land") + KbTheme.values().flatMap { listOf(it.keyRKey, it.keyGapKey) },
+            Page.LOOK_FX to listOf(TapEffect.PREF, TapEffect.COLOR_PREF, BackEffect.PREF),
+        )
+    }
+
+    private fun confirmResetPage() {
+        val keys = pageKeys[page] ?: return
+        val d = MaterialAlertDialogBuilder(this)
+            .setTitle("Reset ${page.label}?")
+            .setMessage("Only the options on this page return to their defaults.")
+            .setPositiveButton("Reset") { _, _ -> Prefs.remove(this, keys); recreate() }
+            .setNegativeButton("Cancel", null).create()
+        d.setOnShowListener { tintDialog(d); d.getButton(AlertDialog.BUTTON_POSITIVE)?.setTextColor(ui.error) }
+        d.show()
     }
 
     private fun confirmReset() {
