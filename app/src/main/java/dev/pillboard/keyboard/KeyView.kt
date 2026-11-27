@@ -510,7 +510,7 @@ class KeyView(
     private var sliding = false
     /** Shared character-preview bubble; null disables previews (e.g. in the settings preview). */
     var preview: KeyPreview? = null
-    /** Tap-effect overlay (Settings > Feedback > Tap effect); independent of the theme. */
+    /** Tap-effect overlay (Settings > Appearance > Effects > Tap effect); independent of the theme. */
     var tapFx: TapFxView? = null
     /** Effect behind the keys (on the shell); independent of the theme and of [tapFx]. */
     var tapFxBack: TapFxBackView? = null

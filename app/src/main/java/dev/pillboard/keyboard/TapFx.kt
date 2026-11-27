@@ -12,7 +12,7 @@ import kotlin.math.pow
 import kotlin.math.sin
 
 /**
- * Tap effects: a little burst where a key is pressed. This is a setting of its own (Settings > Feedback > Tap effect) and has
+ * Tap effects: a little burst where a key is pressed. This is a setting of its own (Settings > Appearance > Effects > Tap effect) and has
  * nothing to do with the keyboard [KbTheme]: any effect works on any theme, like the key effects of Samsung Keys Cafe.
  */
 private val TAP_EFFECTS = TapEffect.values()

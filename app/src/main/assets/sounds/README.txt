@@ -11,4 +11,4 @@ glass/      Generated in-house (soft glassy tink) for Liquid Glass        OK to 
 paper/      Generated in-house (pencil tap on paper) for Paper            OK to publish
 terminal/   Generated in-house (teletype clack + bell) for Terminal       OK to publish
 mechanical/ Generated in-house (clicky switch + thock) for Mechanical     OK to publish
-Settings > Feedback > Sound style defaults to "Ikuti tema": every theme uses its own folder (ios/ is only the fallback).
+Settings > Feedback > Sound style defaults to "Follow theme": every theme uses its own folder (ios/ is only the fallback).

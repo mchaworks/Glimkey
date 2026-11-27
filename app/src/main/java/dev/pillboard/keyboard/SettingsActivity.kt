@@ -36,17 +36,17 @@ class SettingsActivity : Activity() {
 
     private enum class Page(val label: String, val sub: String, val icon: Int = 0, val tile: Int = 0, val parent: Page? = null) {
         HOME("Glimkey", ""),
-        TYPING("Typing", "Suggestions, learning, auto-correction, touch timing", R.drawable.ic_set_typing, 0xFF0A84FF.toInt()),
-        TRANSLATE("Translation", "Online translate, target language", R.drawable.ic_translate, 0xFF32ADE6.toInt()),
-        APPEARANCE("Appearance", "Theme, colors, glass, keys, effects", R.drawable.ic_set_look, 0xFFBF5AF2.toInt()),
+        TYPING("Typing", "Suggestions, auto-correction, cursor, key timing, stats", R.drawable.ic_set_typing, 0xFF0A84FF.toInt()),
+        TRANSLATE("Translation", "Translate button, service, target language", R.drawable.ic_translate, 0xFF32ADE6.toInt()),
+        APPEARANCE("Appearance", "Theme, colors, glass, key size and shape, effects", R.drawable.ic_set_look, 0xFFBF5AF2.toInt()),
         LOOK_THEME("Theme & mode", "Keyboard theme, light / dark", R.drawable.ic_set_look, 0xFFBF5AF2.toInt(), parent = APPEARANCE),
         LOOK_COLOR("Colors", "Accent color, three-tone accent", R.drawable.ic_set_look, 0xFFFF375F.toInt(), parent = APPEARANCE),
         LOOK_GLASS("Glass & blur", "Backdrop blur, tint, key opacity, refraction, lens", R.drawable.ic_set_look, 0xFF32ADE6.toInt(), parent = APPEARANCE),
-        LOOK_KEYS("Keys", "Height, shape, spacing, key preview", R.drawable.ic_set_layout, 0xFFFF9F0A.toInt(), parent = APPEARANCE),
-        LOOK_FX("Effects", "Tap effect, back effect, effect color", R.drawable.ic_set_feedback, 0xFF30B650.toInt(), parent = APPEARANCE),
-        LAYOUT("Layout", "Layout style, number row, emoji key, bottom spacing", R.drawable.ic_set_layout, 0xFFFF9F0A.toInt()),
-        FEEDBACK("Feedback", "Haptics", R.drawable.ic_set_feedback, 0xFF30B650.toInt()),
-        ADVANCED("Advanced", "Learned words, backup, reset, emoji history", R.drawable.ic_set_more, 0xFF8E8E93.toInt()),
+        LOOK_KEYS("Keys", "Height, shape, spacing, popup", R.drawable.ic_set_layout, 0xFFFF9F0A.toInt(), parent = APPEARANCE),
+        LOOK_FX("Effects", "Tap and back effects, animation", R.drawable.ic_set_feedback, 0xFF30B650.toInt(), parent = APPEARANCE),
+        LAYOUT("Layout", "Style, number row, hints, one-handed, strip button, emoji", R.drawable.ic_set_layout, 0xFFFF9F0A.toInt()),
+        FEEDBACK("Feedback", "Haptics and typing sound", R.drawable.ic_set_feedback, 0xFF30B650.toInt()),
+        ADVANCED("Advanced", "Learned data, backup and restore, reset", R.drawable.ic_set_more, 0xFF8E8E93.toInt()),
         ABOUT("About", "Version, license, credits", R.drawable.ic_set_info, 0xFF5AB8E8.toInt()),
     }
 
@@ -56,7 +56,7 @@ class SettingsActivity : Activity() {
     private fun up() = go(page.parent ?: Page.HOME)
 
     /** Single source of truth: pages and search both render from this list. */
-    private class Item(val page: Page, val title: String, val keys: String, val visible: () -> Boolean = { true }, val make: () -> View)
+    private class Item(val page: Page, val title: String, val keys: String, val group: String = "", val visible: () -> Boolean = { true }, val make: () -> View)
 
     private companion object { const val REPO = "https://github.com/mchaworks/Glimkey" }
 
@@ -106,73 +106,48 @@ class SettingsActivity : Activity() {
 
     private val items: List<Item> by lazy {
         listOf(
-            Item(Page.TYPING, "Suggestions", "word bar predictions") { ui.toggle("Suggestions", "Word bar above the keys", "suggest", true) },
-            Item(Page.TYPING, "Learn from typing", "learn personalize words adaptive memory privacy") {
+            Item(Page.TYPING, "Suggestions", "word bar predictions", group = "Suggestions") { ui.toggle("Suggestions", "Word bar above the keys", "suggest", true) },
+            Item(Page.TYPING, "Auto-correction", "fix typos undo", group = "Suggestions") { ui.toggle("Auto-correction", "Fix common typos on space, backspace undoes", "autocorrect", true) },
+            Item(Page.TYPING, "Learn from typing", "learn personalize words adaptive memory privacy", group = "Suggestions") {
                 ui.toggle("Learn from typing", "Remembers your words and word pairs on this device only. Never in password, email, web address or incognito fields.", "learn", true)
             },
-            Item(Page.TYPING, "Typing stats", "statistics speed wpm words keys accuracy counter") {
-                ui.link("Typing stats", "Speed, keys and words. Counts only, never your text", chevron = false) { showTypingStats() }
+            Item(Page.TYPING, "Auto-capitalization", "capital sentence shift", group = "Writing") { ui.toggle("Auto-capitalization", "Capital letter at the start of sentences", "autocap", true) },
+            Item(Page.TYPING, "Double-space period", "dot full stop", group = "Writing") { ui.toggle("Double-space period", "Tap space twice to insert a period", "dblspace", true) },
+            Item(Page.TYPING, "Repeat last line", "again redo termux command previous enter strip button", group = "Writing") {
+                ui.toggle("Repeat last line", "Adds a strip button action that types the last line you sent with Enter again. Pick it under Layout > Strip button", "repeat_last", false) { renderBody() }
             },
-            Item(Page.TYPING, "Collect typing stats", "statistics speed wpm counter privacy off") {
-                ui.toggle("Collect typing stats", "Count keys, words and speed. Never the text, never in password fields", TypingStats.PREF, true)
-            },
-            Item(Page.TYPING, "Auto-capitalization", "capital sentence shift") { ui.toggle("Auto-capitalization", "Capital letter at the start of sentences", "autocap", true) },
-            Item(Page.TYPING, "Double-space period", "dot full stop") { ui.toggle("Double-space period", "Tap space twice to insert a period", "dblspace", true) },
-            Item(Page.TYPING, "Auto-correction", "fix typos undo") { ui.toggle("Auto-correction", "Fix common typos on space, backspace undoes", "autocorrect", true) },
-            Item(Page.TYPING, "Space bar cursor", "slide swipe cursor move space") { ui.toggle("Space bar cursor", "Slide on the space bar to move the cursor", "spaceslide", true) },
-            Item(Page.TYPING, "Cursor loupe", "magnifier loupe cursor space slide glass zoom") { ui.toggle("Cursor loupe", "Shows a magnifier with the text around the cursor while you slide on the space bar. Never in password fields.", "cursorloupe", true) },
-            Item(Page.TYPING, "Long-press delay", "hold accents alternate characters hint time slow fast ms") {
+            Item(Page.TYPING, "Space bar cursor", "slide swipe cursor move space", group = "Cursor") { ui.toggle("Space bar cursor", "Slide on the space bar to move the cursor", "spaceslide", true) },
+            Item(Page.TYPING, "Cursor loupe", "magnifier loupe cursor space slide glass zoom", group = "Cursor") { ui.toggle("Cursor loupe", "Shows a magnifier with the text around the cursor while you slide on the space bar. Never in password fields.", "cursorloupe", true) },
+            Item(Page.TYPING, "Long-press delay", "hold accents alternate characters hint time slow fast ms", group = "Key timing") {
                 ui.slider("Long-press delay", 200, 600, "longpress_ms", 350, listOf("Fast" to 250, "Standard" to 350, "Slow" to 500), unit = " ms") { }
             },
-            Item(Page.TYPING, "Backspace repeat delay", "hold backspace delete repeat start wait ms") {
+            Item(Page.TYPING, "Backspace repeat delay", "hold backspace delete repeat start wait ms", group = "Key timing") {
                 ui.slider("Backspace repeat delay", 200, 700, "repeat_delay", 400, listOf("Quick" to 280, "Standard" to 400, "Patient" to 600), unit = " ms") { }
             },
-            Item(Page.TYPING, "Backspace repeat speed", "hold backspace delete repeat speed interval fast slow ms") {
+            Item(Page.TYPING, "Backspace repeat speed", "hold backspace delete repeat speed interval fast slow ms", group = "Key timing") {
                 ui.slider("Backspace repeat speed", 20, 120, "repeat_ms", 45, listOf("Fast" to 25, "Standard" to 45, "Slow" to 80), unit = " ms") { }
             },
-            Item(Page.TYPING, "Repeat last line", "again redo termux command previous enter strip button") {
-                ui.toggle("Repeat last line", "Adds a strip button action that types the last line you sent with Enter again. Pick it under Layout > Strip button", "repeat_last", false) { renderBody() }
+            Item(Page.TYPING, "Collect typing stats", "statistics speed wpm counter privacy off", group = "Statistics") {
+                ui.toggle("Collect typing stats", "Count keys, words and speed. Never the text, never in password fields", TypingStats.PREF, true)
+            },
+            Item(Page.TYPING, "Typing stats", "statistics speed wpm words keys accuracy counter", group = "Statistics") {
+                ui.link("Typing stats", "Speed, keys and words. Counts only, never your text", chevron = false) { showTypingStats() }
             },
             Item(Page.TRANSLATE, "Translation", "translate online language word bar") {
                 ui.toggle("Translation", "Adds a translate button to the word bar. While translate mode is open, the text of the field you are typing in is sent to the service chosen below. Never used in password fields.", "translate", false) { renderBody() }
             },
-            Item(Page.TRANSLATE, "Service", "translate provider google mymemory libre online") {
+            Item(Page.TRANSLATE, "Service", "translate provider google mymemory libre online", group = "Service", visible = { translateOn() }) {
                 ui.link("Service", Translator.provider(this).label, chevron = false) { pickProvider() }
             },
-            Item(Page.TRANSLATE, "Target language", "translate language target default system") {
+            Item(Page.TRANSLATE, "Target language", "translate language target default system", group = "Service", visible = { translateOn() }) {
                 ui.link("Target language", Languages.nameOf(this, targetCode()), chevron = false) { pickTarget() }
             },
-            Item(Page.TRANSLATE, "Server URL", "translate libre server url host", visible = { Translator.provider(this) == Translator.Provider.LIBRE }) {
+            Item(Page.TRANSLATE, "Server URL", "translate libre server url host", group = "Service", visible = { translateOn() && Translator.provider(this) == Translator.Provider.LIBRE }) {
                 ui.link("Server URL", Prefs.str(this, "tr_url", "").ifEmpty { "Not set" }, chevron = false) { editText("Server URL", "tr_url", false) }
             },
-            Item(Page.TRANSLATE, "API key", "translate libre key token", visible = { Translator.provider(this) == Translator.Provider.LIBRE }) {
+            Item(Page.TRANSLATE, "API key", "translate libre key token", group = "Service", visible = { translateOn() && Translator.provider(this) == Translator.Provider.LIBRE }) {
                 ui.link("API key", if (Prefs.str(this, "tr_key", "").isEmpty()) "Optional" else "Set", chevron = false) { editText("API key", "tr_key", true) }
             },
-            Item(Page.LAYOUT, "Layout style", "layout gboard ios style symbols bottom row enter emoji comma google apple") {
-                ui.cycle("Layout style", "layout_style", "ios", listOf("ios" to "iOS", "gboard" to "Gboard")) { refreshPreview(); renderBody() }
-            },
-            Item(Page.LAYOUT, "Smart keys", "field numpad number phone email url web at slash dot com adapt") {
-                ui.toggle("Smart keys", "Numpad in number fields, @ in e-mail fields, / and .com in web fields", "fieldaware", true)
-            },
-            Item(Page.LAYOUT, "Number row", "digits numbers top") { ui.toggle("Number row", "Show 1–0 above the letters", "numrow", false) { refreshPreview() } },
-            Item(Page.LAYOUT, "Key hints", "hint symbol long press hold gboard number punctuation top right") {
-                ui.toggle("Key hints", "A small symbol on each letter key; hold the key to type it. Letters then type on release, and hold no longer shows accents like é", "keyhint", false) { refreshPreview() }
-            },
-            Item(Page.LAYOUT, "One-handed mode", "thumb left right shrink side narrow small phone reach") {
-                ui.cycle("One-handed mode", "onehand", "off", listOf("off" to "Off", "left" to "Keyboard on the left", "right" to "Keyboard on the right")) { }
-            },
-            Item(Page.LAYOUT, "Bottom spacing", "padding gesture bar navigation thumb height lift raise space below") {
-                ui.slider("Bottom spacing", 0, 32, "bottom_pad", 0, listOf("None" to 0, "Small" to 8, "Roomy" to 20)) { }
-            },
-            Item(Page.LAYOUT, "Strip button", "word bar capsule button feature translate clipboard text editing emoji settings swipe hold shortcut") {
-                val feats = StripFeature.available(this)
-                ui.cycle("Strip button", "strip_feature", StripFeature.current(this).id, feats.map { it.id to it.label }) { refreshPreview() }
-            },
-            Item(Page.LAYOUT, "Emoji key", "emoji smiley picker button") { ui.toggle("Emoji key", "Show the emoji button", "emoji", true) { refreshPreview(); renderBody() } },
-            Item(Page.LAYOUT, "Emoji key position", "emoji smiley button comma capsule widget place", visible = { Prefs.bool(this, "emoji", true) && !Prefs.gboard(this) }) {
-                ui.cycle("Emoji key position", "emoji_pos", "capsule", listOf("capsule" to "On the strip button (swipe or hold)", "comma" to "Next to the comma key")) { refreshPreview(); renderBody() }
-            },
-            Item(Page.ADVANCED, "Clear recent emoji", "emoji recent history forget") { ui.link("Clear recent emoji", "Forget the emoji you used lately", chevron = false) { EmojiData.clearRecents(this) } },
             Item(Page.LOOK_THEME, "Theme", "theme style paper terminal mechanical liquid glass skin look") {
                 ui.themePicker { refreshPreview(); renderBody() }
             },
@@ -195,118 +170,146 @@ class SettingsActivity : Activity() {
                     android.widget.Toast.makeText(this, "Glass look applied", android.widget.Toast.LENGTH_SHORT).show()
                 }
             },
-            Item(Page.LOOK_GLASS, "Blur background", "frosted glass", visible = { KbTheme.current(this).isGlass }) {
+            Item(Page.LOOK_GLASS, "Blur background", "frosted glass", group = "Backdrop", visible = { KbTheme.current(this).isGlass }) {
                 ui.toggle("Blur background",
                     if (blurOk) "Liquid Glass backdrop blur" else "Glass tint fallback; system blur unavailable",
                     "blur", false, enabled = true, onChange = { blurStatusValue?.setTextBlur(blurStatus()) })
             },
-            Item(Page.LOOK_GLASS, "Blur tint", "blur tint opacity transparency glass shell frosted clear see through", visible = { KbTheme.current(this).isGlass }) {
-                ui.slider("Blur tint", 10, 100, "blur_tint", 62, listOf("Clear" to 30, "Standard" to 62, "Frosted" to 85), unit = "%") { refreshPreview() }
-            },
-            Item(Page.LOOK_GLASS, "Blur strength", "blur radius smooth wide soft blotchy patchy sharp heavy", visible = { KbTheme.current(this).isGlass }) {
-                ui.slider("Blur strength", 10, 64, "blur_radius", GlassDefaults.BLUR_RADIUS, listOf("Soft" to 24, "Standard" to GlassDefaults.BLUR_RADIUS, "Heavy" to 62)) { }
-            },
-            Item(Page.LOOK_GLASS, "Key opacity", "glass keys keycap transparent translucent see through blur clear frosted solid", visible = { KbTheme.current(this).isGlass }) {
-                ui.slider("Key opacity", 30, 100, "key_alpha", 100, listOf("Clear" to 45, "Frosted" to 70, "Solid" to 100), unit = "%") { refreshPreview() }
-            },
-            Item(Page.LOOK_GLASS, "Blur status", "blur glass system available blocked", visible = { KbTheme.current(this).isGlass }) {
+            Item(Page.LOOK_GLASS, "Blur status", "blur glass system available blocked", group = "Backdrop", visible = { KbTheme.current(this).isGlass }) {
                 ui.info("Blur status", blurStatus()).also { blurStatusValue = it.findViewWithTag<BlurTextView>("value") }
             },
-            Item(Page.LOOK_GLASS, "Liquid refraction", "glass refraction edge bevel dispersion bend background shell", visible = { KbTheme.current(this).isGlass }) {
+            Item(Page.LOOK_GLASS, "Blur strength", "blur radius smooth wide soft blotchy patchy sharp heavy", group = "Backdrop", visible = { KbTheme.current(this).isGlass }) {
+                ui.slider("Blur strength", 10, 64, "blur_radius", GlassDefaults.BLUR_RADIUS, listOf("Soft" to 24, "Standard" to GlassDefaults.BLUR_RADIUS, "Heavy" to 62)) { }
+            },
+            Item(Page.LOOK_GLASS, "Blur tint", "blur tint opacity transparency glass shell frosted clear see through", group = "Backdrop", visible = { KbTheme.current(this).isGlass }) {
+                ui.slider("Blur tint", 10, 100, "blur_tint", 62, listOf("Clear" to 30, "Standard" to 62, "Frosted" to 85), unit = "%") { refreshPreview() }
+            },
+            Item(Page.LOOK_GLASS, "Key opacity", "glass keys keycap transparent translucent see through blur clear frosted solid", group = "Keys and edge", visible = { KbTheme.current(this).isGlass }) {
+                ui.slider("Key opacity", 30, 100, "key_alpha", 100, listOf("Clear" to 45, "Frosted" to 70, "Solid" to 100), unit = "%") { refreshPreview() }
+            },
+            Item(Page.LOOK_GLASS, "Liquid refraction", "glass refraction edge bevel dispersion bend background shell", group = "Keys and edge", visible = { KbTheme.current(this).isGlass }) {
                 ui.toggle("Liquid refraction",
                     if (Build.VERSION.SDK_INT >= 33) "The glass edge bends the keys near it, with a faint color fringe" else "Needs Android 13+",
                     "refract", false, enabled = Build.VERSION.SDK_INT >= 33, onChange = { refreshPreview() })
             },
-            Item(Page.LOOK_GLASS, "Liquid lens", "refraction lens magnifier key preview glass", visible = { KbTheme.current(this).isGlass }) {
+            Item(Page.LOOK_GLASS, "Frosted key preview", "frosted blur glass key preview bubble popup", group = "Key preview", visible = { KbTheme.current(this).isGlass }) {
+                ui.toggle("Frosted key preview",
+                    if (Build.VERSION.SDK_INT >= 31) "Key preview blurs the keys under it (light, no lens)" else "Needs Android 12+, using the plain bubble",
+                    "preview_blur", true, enabled = Build.VERSION.SDK_INT >= 31, onChange = { renderBody(animate = true) })
+            },
+            Item(Page.LOOK_GLASS, "Preview blur strength", "frosted blur key preview bubble popup soft heavy sharp live", group = "Key preview", visible = { KbTheme.current(this).isGlass && frostedPreviewOn() }) {
+                ui.slider("Preview blur strength", 0, 16, "preview_blur_amt", 5, listOf("Soft" to 2, "Standard" to 5, "Heavy" to 12)) { }
+            },
+            Item(Page.LOOK_GLASS, "Preview tint", "frosted key preview bubble popup tint opacity clear see through frosted", group = "Key preview", visible = { KbTheme.current(this).isGlass && frostedPreviewOn() }) {
+                ui.slider("Preview tint", 10, 90, "preview_blur_tint", 43, listOf("Clear" to 25, "Standard" to 43, "Frosted" to 70), unit = "%") { }
+            },
+            Item(Page.LOOK_GLASS, "Liquid lens", "refraction lens magnifier key preview glass", group = "Key preview", visible = { KbTheme.current(this).isGlass }) {
                 ui.toggle("Liquid lens",
                     if (Build.VERSION.SDK_INT >= 33) "Key preview refracts the keys around it (heavier: can lag)" else "Needs Android 13+, using the plain bubble",
                     "lens", false, enabled = Build.VERSION.SDK_INT >= 33)
             },
-            Item(Page.LOOK_GLASS, "Frosted key preview", "frosted blur glass key preview bubble popup", visible = { KbTheme.current(this).isGlass }) {
-                ui.toggle("Frosted key preview",
-                    if (Build.VERSION.SDK_INT >= 31) "Key preview blurs the keys under it (light, no lens)" else "Needs Android 12+, using the plain bubble",
-                    "preview_blur", true, enabled = Build.VERSION.SDK_INT >= 31)
-            },
-            Item(Page.LOOK_GLASS, "Preview blur strength", "frosted blur key preview bubble popup soft heavy sharp live", visible = { KbTheme.current(this).isGlass }) {
-                ui.slider("Preview blur strength", 0, 16, "preview_blur_amt", 5, listOf("Soft" to 2, "Standard" to 5, "Heavy" to 12)) { }
-            },
-            Item(Page.LOOK_GLASS, "Preview tint", "frosted key preview bubble popup tint opacity clear see through frosted", visible = { KbTheme.current(this).isGlass }) {
-                ui.slider("Preview tint", 10, 90, "preview_blur_tint", 43, listOf("Clear" to 25, "Standard" to 43, "Frosted" to 70), unit = "%") { }
-            },
-            Item(Page.LOOK_KEYS, "Key preview", "popup bubble character magnify") {
-                ui.toggle("Key preview", "Floating character bubble above the pressed key", "keypreview", true)
-            },
-            Item(Page.LOOK_KEYS, "Key height", "size tall short dp") {
+            Item(Page.LOOK_KEYS, "Key height", "size tall short dp", group = "Size") {
                 ui.slider("Key height", 42, 62, "key_h", 50, listOf("Short" to 44, "Standard" to 50, "Tall" to 58)) { refreshPreview() }
             },
-            Item(Page.LOOK_KEYS, "Key height (landscape)", "size tall short dp horizontal sideways rotate") {
+            Item(Page.LOOK_KEYS, "Key height (landscape)", "size tall short dp horizontal sideways rotate", group = "Size") {
                 ui.slider("Key height (landscape)", 30, 62, "key_h_land", 42, listOf("Short" to 36, "Standard" to 42, "Tall" to 50)) { }
             },
-            Item(Page.LOOK_KEYS, "Key shape", "radius corner round square") {
+            Item(Page.LOOK_KEYS, "Key shape", "radius corner round square", group = "Shape") {
                 ui.slider("Key shape", 2, 20, KbTheme.current(this).keyRKey, KbTheme.current(this).keyRadiusDp, listOf("Square" to 2, "Standard" to KbTheme.current(this).keyRadiusDp, "Round" to 18)) { refreshPreview() }
             },
-            Item(Page.LOOK_KEYS, "Key spacing", "gap margin tight") {
+            Item(Page.LOOK_KEYS, "Key spacing", "gap margin tight", group = "Shape") {
                 ui.slider("Key spacing", 2, 6, KbTheme.current(this).keyGapKey, KbTheme.current(this).keyGapDp, listOf("Tight" to 2, "Standard" to KbTheme.current(this).keyGapDp, "Roomy" to 5)) { refreshPreview() }
             },
-            Item(Page.FEEDBACK, "Haptic feedback", "vibration vibrate") { ui.toggle("Haptic feedback", "Vibrate on key press", "haptic", true) { renderBody(animate = true) } },
-            Item(Page.FEEDBACK, "Haptic strength", "vibration vibrate strength intensity power haptic light strong", visible = { Prefs.bool(this, "haptic", true) }) {
-                ui.slider("Haptic strength", 5, 100, "haptic_strength", 85, listOf("Light" to 40, "Standard" to 85, "Strong" to 100), unit = "%") { Haptics.play(this) }
+            Item(Page.LOOK_KEYS, "Key preview", "popup bubble character magnify", group = "Popup") {
+                ui.toggle("Key preview", "Floating character bubble above the pressed key", "keypreview", true)
             },
-            Item(Page.FEEDBACK, "Haptic style", "vibration vibrate style feel crisp soft heavy mechanical click haptic", visible = { Prefs.bool(this, "haptic", true) }) {
-                ui.cycle("Haptic style", "haptic_style", "crisp", HapticStyle.values().map { it.id to it.label }) { Haptics.play(this) }
+            Item(Page.LOOK_FX, "Tap effect", "tap effect animation ripple sparkle hearts bubbles confetti petals keys cafe", group = "Tap and back effects") {
+                ui.cycle("Tap effect", TapEffect.PREF, TapEffect.current(this).id, TapEffect.STYLES) { renderBody(animate = true) }
             },
-            Item(Page.FEEDBACK, "Haptic engine", "vibration haptic engine system advanced primitive no vibration fix", visible = { Prefs.bool(this, "haptic", true) }) {
-                ui.cycle("Haptic engine", "haptic_engine", "system", listOf("system" to "Standard", "advanced" to "Advanced (strength)")) { Haptics.play(this) }
+            Item(Page.LOOK_FX, "Back effect", "back effect behind keys press glow paint splat glow ink bloom", group = "Tap and back effects") {
+                ui.cycle("Back effect", BackEffect.PREF, BackEffect.current(this).id, BackEffect.styles(this)) { refreshPreview(); renderBody(animate = true) }
             },
-            Item(Page.FEEDBACK, "Haptic on cursor slide", "vibration haptic space slide cursor tick move", visible = { Prefs.bool(this, "haptic", true) && Prefs.bool(this, "spaceslide", true) }) {
-                ui.toggle("Haptic on cursor slide", "A faint tick each time the cursor moves while you slide on the space bar", "haptic_slide", true) { if (it) Haptics.play(this, android.view.HapticFeedbackConstants.CLOCK_TICK) }
+            Item(Page.LOOK_FX, "Tap effect color", "tap effect color rainbow accent", group = "Tap and back effects",
+                visible = { TapEffect.current(this) != TapEffect.OFF || BackEffect.current(this).let { it != BackEffect.OFF && it != BackEffect.PRESS_GLOW } }) {
+                ui.cycle("Tap effect color", TapEffect.COLOR_PREF, "auto", TapEffect.COLORS) { }
             },
-            Item(Page.FEEDBACK, "Haptic test", "vibration haptic test diagnose debug no vibration not working") {
-                ui.link("Haptic test", "Try each vibration method and see which one your phone feels", chevron = false) { HapticLab.show(this) }
-            },
-            Item(Page.FEEDBACK, "Haptic per key", "vibration haptic key type return space shift backspace firm light", visible = { Prefs.bool(this, "haptic", true) }) {
-                ui.toggle("Haptic per key", "Return feels firmer; shift, 123, space and backspace feel lighter", "haptic_keytype", true) { Haptics.play(this, HAPTIC_ACCENT) }
-            },
-            Item(Page.FEEDBACK, "Adaptive haptics", "vibration haptic fast typing speed buzz lighter adaptive", visible = { Prefs.bool(this, "haptic", true) }) {
-                ui.toggle("Adaptive haptics", "Lighter taps while you type fast, so it never turns into a buzz", "haptic_adaptive", true)
-            },
-            Item(Page.FEEDBACK, "Release tick", "vibration haptic release lift finger up tick", visible = { Prefs.bool(this, "haptic", true) }) {
-                ui.toggle("Release tick", "A faint tick when you lift your finger off a key", "haptic_release", true) { if (it) Haptics.play(this, HAPTIC_RELEASE) }
-            },
-            Item(Page.FEEDBACK, "Typing sound", "sound click key audio android 17") { ui.toggle("Typing sound", "Play a click on every key press", "sound", false) { if (it) TypingSound.play(this, TypingSound.Kind.STANDARD) } },
-            Item(Page.FEEDBACK, "Sound style", "android ios thock boba tofu foam click style") {
-                ui.cycle("Sound style", "sound_style", TypingSound.styleOf(this), TypingSound.STYLES) { TypingSound.release(); TypingSound.play(this, TypingSound.Kind.STANDARD) }
-            },
-            Item(Page.LOOK_FX, "Lighter key animation", "blur replace shift page switch lag smooth fast light performance gpu") {
+            Item(Page.LOOK_FX, "Lighter key animation", "blur replace shift page switch lag smooth fast light performance gpu", group = "Performance") {
                 ui.toggle("Lighter key animation", "Shift and page changes fade and drift the letters without the GPU blur (smoother on weaker phones). Applies the next time the keyboard rebuilds.",
                     "blur_text_lite", false)
             },
-            Item(Page.LOOK_FX, "Tap effect", "tap effect animation ripple sparkle hearts bubbles confetti petals keys cafe") {
-                ui.cycle("Tap effect", TapEffect.PREF, TapEffect.current(this).id, TapEffect.STYLES) { }
+            Item(Page.LAYOUT, "Layout style", "layout gboard ios style symbols bottom row enter emoji comma google apple", group = "Layout") {
+                ui.cycle("Layout style", "layout_style", "ios", listOf("ios" to "iOS", "gboard" to "Gboard")) { refreshPreview(); renderBody() }
             },
-            Item(Page.LOOK_FX, "Back effect", "back effect behind keys press glow paint splat glow ink bloom") {
-                ui.cycle("Back effect", BackEffect.PREF, BackEffect.current(this).id, BackEffect.styles(this)) { refreshPreview() }
+            Item(Page.LAYOUT, "Number row", "digits numbers top", group = "Layout") { ui.toggle("Number row", "Show 1–0 above the letters", "numrow", false) { refreshPreview() } },
+            Item(Page.LAYOUT, "Key hints", "hint symbol long press hold gboard number punctuation top right", group = "Layout") {
+                ui.toggle("Key hints", "A small symbol on each letter key; hold the key to type it. Letters then type on release, and hold no longer shows accents like é", "keyhint", false) { refreshPreview() }
             },
-            Item(Page.LOOK_FX, "Tap effect color", "tap effect color rainbow accent") {
-                ui.cycle("Tap effect color", TapEffect.COLOR_PREF, "auto", TapEffect.COLORS) { }
+            Item(Page.LAYOUT, "Smart keys", "field numpad number phone email url web at slash dot com adapt", group = "Layout") {
+                ui.toggle("Smart keys", "Numpad in number fields, @ in e-mail fields, / and .com in web fields", "fieldaware", true)
             },
-            Item(Page.FEEDBACK, "Sound volume", "volume loud quiet click") {
+            Item(Page.LAYOUT, "One-handed mode", "thumb left right shrink side narrow small phone reach", group = "Reach") {
+                ui.cycle("One-handed mode", "onehand", "off", listOf("off" to "Off", "left" to "Keyboard on the left", "right" to "Keyboard on the right")) { refreshPreview() }
+            },
+            Item(Page.LAYOUT, "Bottom spacing", "padding gesture bar navigation thumb height lift raise space below", group = "Reach") {
+                ui.slider("Bottom spacing", 0, 32, "bottom_pad", 0, listOf("None" to 0, "Small" to 8, "Roomy" to 20)) { refreshPreview() }
+            },
+            Item(Page.LAYOUT, "Strip button", "word bar capsule button feature translate clipboard text editing emoji settings swipe hold shortcut", group = "Strip and emoji") {
+                val feats = StripFeature.available(this)
+                ui.cycle("Strip button", "strip_feature", StripFeature.current(this).id, feats.map { it.id to it.label }) { refreshPreview() }
+            },
+            Item(Page.LAYOUT, "Emoji key", "emoji smiley picker button", group = "Strip and emoji") { ui.toggle("Emoji key", "Show the emoji button", "emoji", true) { refreshPreview(); renderBody() } },
+            Item(Page.LAYOUT, "Emoji key position", "emoji smiley button comma capsule widget place", group = "Strip and emoji", visible = { Prefs.bool(this, "emoji", true) && !Prefs.gboard(this) }) {
+                ui.cycle("Emoji key position", "emoji_pos", "capsule", listOf("capsule" to "On the strip button (swipe or hold)", "comma" to "Next to the comma key")) { refreshPreview(); renderBody() }
+            },
+            Item(Page.FEEDBACK, "Haptic feedback", "vibration vibrate", group = "Haptics") { ui.toggle("Haptic feedback", "Vibrate on key press", "haptic", true) { renderBody(animate = true) } },
+            Item(Page.FEEDBACK, "Haptic strength", "vibration vibrate strength intensity power haptic light strong", group = "Haptics", visible = { Prefs.bool(this, "haptic", true) }) {
+                ui.slider("Haptic strength", 5, 100, "haptic_strength", 85, listOf("Light" to 40, "Standard" to 85, "Strong" to 100), unit = "%") { Haptics.play(this) }
+            },
+            Item(Page.FEEDBACK, "Haptic style", "vibration vibrate style feel crisp soft heavy mechanical click haptic", group = "Haptics", visible = { Prefs.bool(this, "haptic", true) }) {
+                ui.cycle("Haptic style", "haptic_style", "crisp", HapticStyle.values().map { it.id to it.label }) { Haptics.play(this) }
+            },
+            Item(Page.FEEDBACK, "Haptic per key", "vibration haptic key type return space shift backspace firm light", group = "Haptics", visible = { Prefs.bool(this, "haptic", true) }) {
+                ui.toggle("Haptic per key", "Return feels firmer; shift, 123, space and backspace feel lighter", "haptic_keytype", true) { Haptics.play(this, HAPTIC_ACCENT) }
+            },
+            Item(Page.FEEDBACK, "Adaptive haptics", "vibration haptic fast typing speed buzz lighter adaptive", group = "Haptics", visible = { Prefs.bool(this, "haptic", true) }) {
+                ui.toggle("Adaptive haptics", "Lighter taps while you type fast, so it never turns into a buzz", "haptic_adaptive", true)
+            },
+            Item(Page.FEEDBACK, "Release tick", "vibration haptic release lift finger up tick", group = "Haptics", visible = { Prefs.bool(this, "haptic", true) }) {
+                ui.toggle("Release tick", "A faint tick when you lift your finger off a key", "haptic_release", true) { if (it) Haptics.play(this, HAPTIC_RELEASE) }
+            },
+            Item(Page.FEEDBACK, "Haptic on cursor slide", "vibration haptic space slide cursor tick move", group = "Haptics", visible = { Prefs.bool(this, "haptic", true) && Prefs.bool(this, "spaceslide", true) }) {
+                ui.toggle("Haptic on cursor slide", "A faint tick each time the cursor moves while you slide on the space bar", "haptic_slide", true) { if (it) Haptics.play(this, android.view.HapticFeedbackConstants.CLOCK_TICK) }
+            },
+            Item(Page.FEEDBACK, "Haptic engine", "vibration haptic engine system advanced primitive no vibration fix", group = "Haptics", visible = { Prefs.bool(this, "haptic", true) }) {
+                ui.cycle("Haptic engine", "haptic_engine", "system", listOf("system" to "Standard", "advanced" to "Advanced (strength)")) { Haptics.play(this) }
+            },
+            Item(Page.FEEDBACK, "Haptic test", "vibration haptic test diagnose debug no vibration not working", group = "Haptics") {
+                ui.link("Haptic test", "Try each vibration method and see which one your phone feels", chevron = false) { HapticLab.show(this) }
+            },
+            Item(Page.FEEDBACK, "Typing sound", "sound click key audio", group = "Typing sound") {
+                ui.toggle("Typing sound", "Play a click on every key press", "sound", false) { if (it) TypingSound.play(this, TypingSound.Kind.STANDARD); renderBody(animate = true) }
+            },
+            Item(Page.FEEDBACK, "Sound style", "ios thock boba tofu foam click style theme glass paper terminal mechanical clay pixel lcd system", group = "Typing sound", visible = { Prefs.bool(this, "sound", false) }) {
+                ui.cycle("Sound style", "sound_style", TypingSound.styleOf(this), TypingSound.STYLES) { TypingSound.release(); TypingSound.play(this, TypingSound.Kind.STANDARD) }
+            },
+            Item(Page.FEEDBACK, "Sound volume", "volume loud quiet click", group = "Typing sound", visible = { Prefs.bool(this, "sound", false) }) {
                 ui.slider("Sound volume", 10, 300, "sound_vol", 60, listOf("Quiet" to 30, "Standard" to 60, "Loud" to 100, "Max" to 300), unit = "%") { TypingSound.play(this, TypingSound.Kind.STANDARD) }
             },
-            Item(Page.ADVANCED, "Clear learned words", "forget learned dictionary personal suggestions words reset") {
+            Item(Page.ADVANCED, "Clear learned words", "forget learned dictionary personal suggestions words reset", group = "Learned data") {
                 ui.link("Clear learned words", "Forget the words and word pairs the keyboard learned from you", chevron = false) {
                     Suggestions.clearLearned(this)
                     android.widget.Toast.makeText(this, "Learned words cleared", android.widget.Toast.LENGTH_SHORT).show()
                 }
             },
-            Item(Page.ADVANCED, "Back up settings", "export backup copy save clipboard json transfer") {
+            Item(Page.ADVANCED, "Clear recent emoji", "emoji recent history forget", group = "Learned data") { ui.link("Clear recent emoji", "Forget the emoji you used lately", chevron = false) { EmojiData.clearRecents(this) } },
+            Item(Page.ADVANCED, "Back up settings", "export backup copy save clipboard json transfer", group = "Backup") {
                 ui.link("Back up settings", "Copy all your settings to the clipboard as text", chevron = false) {
                     val cm = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
                     cm.setPrimaryClip(android.content.ClipData.newPlainText("Glimkey settings", Prefs.exportJson(this)))
                     android.widget.Toast.makeText(this, "Settings copied to the clipboard", android.widget.Toast.LENGTH_SHORT).show()
                 }
             },
-            Item(Page.ADVANCED, "Restore settings", "import restore paste clipboard json transfer") {
+            Item(Page.ADVANCED, "Restore settings", "import restore paste clipboard json transfer", group = "Backup") {
                 ui.link("Restore settings", "Paste a backup from the clipboard", chevron = false) {
                     val cm = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
                     val text = cm.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(this)?.toString().orEmpty()
@@ -315,7 +318,7 @@ class SettingsActivity : Activity() {
                     else { android.widget.Toast.makeText(this, "$n settings restored", android.widget.Toast.LENGTH_SHORT).show(); recreate() }
                 }
             },
-            Item(Page.ADVANCED, "Reset settings", "default restore") { ui.link("Reset settings", "Return all keyboard settings to default", chevron = false) { confirmReset() } },
+            Item(Page.ADVANCED, "Reset settings", "default restore", group = "Reset") { ui.link("Reset settings", "Return all keyboard settings to default", chevron = false) { confirmReset() } },
             Item(Page.ABOUT, "Version", "build about") { ui.info("Version", versionName()) },
             Item(Page.ABOUT, "Source code", "github repository open source code") {
                 ui.link("Source code", "github.com/mchaworks/Glimkey", icon = R.drawable.ic_set_more, tile = 0xFF1C1C1E.toInt()) { openUrl(REPO) }
@@ -328,6 +331,10 @@ class SettingsActivity : Activity() {
             Item(Page.ABOUT, "Key sounds", "mechvibes ios sound packs credits audio") { ui.info("Key sounds", "Mechvibes packs · iOS-style") },
         )
     }
+
+    private fun frostedPreviewOn() = Build.VERSION.SDK_INT >= 31 && Prefs.bool(this, "preview_blur", true)
+
+    private fun translateOn() = Prefs.bool(this, "translate", false)
 
     private fun openUrl(url: String) {
         try { startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url))) } catch (_: Exception) {}
@@ -612,25 +619,33 @@ class SettingsActivity : Activity() {
                     .apply { textSize = 13f; setPadding(20.dp, 12.dp, 20.dp, 0) })
             }
             else -> {
-                body.addView(ui.box(items.filter { it.page == page && it.visible() }.map { it.make() }), ui.lp())
+                // one card per group (the list order is the display order), each under its own small label
+                items.filter { it.page == page && it.visible() }.groupBy { it.group }.forEach { (group, rows) ->
+                    if (group.isNotEmpty()) body.addView(ui.section(group))
+                    body.addView(ui.box(rows.map { it.make() }), ui.lp())
+                }
+                pageNotes[page]?.let { note -> body.addView(ui.caption(note).apply { textSize = 13f; setPadding(20.dp, 8.dp, 20.dp, 0) }) }
                 if (pageKeys[page] != null) body.addView(ui.box(listOf(
-                    ui.link("Reset this page", "Return only the options on ${page.label} to their defaults", chevron = false) { confirmResetPage() })), ui.lp())
-                if (page == Page.TRANSLATE) body.addView(ui.caption(
-                    "Off by default. When it is on, text is sent over the internet only while translate mode is open, to the service you pick. " +
-                    "Google uses an unofficial public endpoint that can change or stop working without notice; MyMemory has a small free daily limit; " +
-                    "LibreTranslate needs your own server.").apply { textSize = 13f; setPadding(20.dp, 4.dp, 20.dp, 0) })
+                    ui.link("Reset this page", "Return only the options on ${page.label} to their defaults", chevron = false) { confirmResetPage() })),
+                    LinearLayout.LayoutParams(-1, -2).apply { topMargin = 16.dp })
             }
         }
     }
 
     private fun searchResults() {
         val q = query.trim().lowercase()
-        val hits = items.filter { it.visible() && (it.title.lowercase().contains(q) || it.keys.contains(q)) }
+        val hits = items.filter {
+            it.visible() &&
+                (it.title.lowercase().contains(q) || it.keys.contains(q) || it.group.lowercase().contains(q) || it.page.label.lowercase().contains(q))
+        }
         if (hits.isEmpty()) {
             body.addView(ui.caption("No matching settings").apply { setPadding(8.dp, 24.dp, 0, 0) })
         } else {
-            body.addView(ui.section("Results"))
-            body.addView(ui.box(hits.map { it.make() }), ui.lp())
+            // each page's matches in their own card, labelled with where they live (Appearance › Colors)
+            hits.groupBy { it.page }.forEach { (p, rows) ->
+                body.addView(ui.section(p.parent?.let { "${it.label} › ${p.label}" } ?: p.label))
+                body.addView(ui.box(rows.map { it.make() }), ui.lp())
+            }
         }
     }
 
@@ -652,7 +667,7 @@ class SettingsActivity : Activity() {
                 LinearLayout.LayoutParams(0, 48.dp, 1f).apply { marginStart = 5.dp })
         }, ui.lp())
         body.addView(ui.section("Settings"))
-        body.addView(ui.box(listOf(Page.TYPING, Page.TRANSLATE, Page.APPEARANCE, Page.LAYOUT, Page.FEEDBACK)
+        body.addView(ui.box(listOf(Page.APPEARANCE, Page.LAYOUT, Page.TYPING, Page.FEEDBACK, Page.TRANSLATE)
             .map { p -> pageLink(p) }, inset = ui.tileInset), ui.lp())
         tryHeader = ui.section("Try it").also { body.addView(it) }
         val (wrap, input) = ui.testField(); testInput = input
@@ -706,6 +721,16 @@ class SettingsActivity : Activity() {
             .setNegativeButton("Cancel", null).show().also { tintDialog(it) }
     }
 
+    /** A short footnote under a page's cards, for the things the rows alone do not explain. */
+    private val pageNotes: Map<Page, String> = mapOf(
+        Page.LOOK_KEYS to "Key shape and spacing are remembered separately for each theme. Height applies to every theme.",
+        Page.FEEDBACK to "Tap effects and the back effect live in Appearance › Effects.",
+        Page.TRANSLATE to "Off by default. When it is on, text is sent over the internet only while translate mode is open, to the service you pick. " +
+            "Google uses an unofficial public endpoint that can change or stop working without notice; MyMemory has a small free daily limit; " +
+            "LibreTranslate needs your own server.",
+        Page.LAYOUT to "The strip button is the capsule at the right end of the word bar. Hold it for all features, swipe it to switch.",
+    )
+
     /** Preference keys behind each page, for "Reset this page". */
     private val pageKeys: Map<Page, List<String>> by lazy {
         mapOf(
@@ -719,7 +744,7 @@ class SettingsActivity : Activity() {
             Page.LOOK_COLOR to listOf("preset", "accent_v2", "dynamic", "hue", "accent_style", "tritone"),
             Page.LOOK_GLASS to listOf("blur", "blur_tint", "blur_radius", "key_alpha", "refract", "lens", "preview_blur", "preview_blur_amt", "preview_blur_tint"),
             Page.LOOK_KEYS to listOf("keypreview", "key_h", "key_h_land") + KbTheme.values().flatMap { listOf(it.keyRKey, it.keyGapKey) },
-            Page.LOOK_FX to listOf(TapEffect.PREF, TapEffect.COLOR_PREF, BackEffect.PREF, "blur_text_lite"),
+            Page.LOOK_FX to listOf(TapEffect.PREF, TapEffect.COLOR_PREF, BackEffect.PREF, "glass_fx", "blur_text_lite"),
         )
     }
 
@@ -768,7 +793,7 @@ class SettingsActivity : Activity() {
         }
         // same refraction as the real keyboard, so the toggle is visible right here
         if (Build.VERSION.SDK_INT >= 33 && t.isGlass) ShellRefraction(card, t.containerRadius).update(Prefs.bool(this, "refract", false))
-        if (Prefs.bool(this, "suggest", true)) {
+        if (Prefs.bool(this, "suggest", true) || Prefs.bool(this, "translate", false)) {
             card.addView(LinearLayout(this).apply {
                 isBaselineAligned = false
                 background = t.stripBackground()
@@ -791,8 +816,9 @@ class SettingsActivity : Activity() {
         class K(val label: String, val w: Float, val style: KeyStyle = KeyStyle.LETTER, val icon: Int = 0)
         val hintsOn = Prefs.bool(this, "keyhint", false)
         val numRowOn = Prefs.bool(this, "numrow", false)
-        fun row(keys: List<K>, rh: Int = h) = LinearLayout(this).apply {
+        fun row(keys: List<K>, rh: Int = h, gutter: Float = 0f) = LinearLayout(this).apply {
             isBaselineAligned = false
+            if (gutter > 0f) addView(android.view.View(context), LinearLayout.LayoutParams(0, 1, gutter))
             keys.forEach { k ->
                 addView(KeyView(context, k.label, k.style, t, false, k.icon) {}.apply {
                     textSize = if (k.label.length == 1 && k.icon == 0) 16f else 13f
@@ -803,11 +829,12 @@ class SettingsActivity : Activity() {
                     }
                 }, LinearLayout.LayoutParams(0, rh, k.w).apply { setMargins(g, g + 2.dp, g, g + 2.dp) })
             }
+            if (gutter > 0f) addView(android.view.View(context), LinearLayout.LayoutParams(0, 1, gutter))
         }
         fun letters(s: String) = s.map { K("$it", 1f) }
         if (Prefs.bool(this, "numrow", false)) card.addView(row(letters("1234567890"), (h * 0.8f).toInt()))
         card.addView(row(letters("qwertyuiop")))
-        card.addView(row(letters("asdfghjkl")))
+        card.addView(row(letters("asdfghjkl"), gutter = 0.5f))
         card.addView(row(listOf(K("Shift", 1.5f, KeyStyle.SPECIAL, R.drawable.ic_shift)) + letters("zxcvbnm") +
             K("Backspace", 1.5f, KeyStyle.SPECIAL, R.drawable.ic_backspace)))
         val gb = Prefs.gboard(this)
@@ -820,7 +847,24 @@ class SettingsActivity : Activity() {
             listOf(K("space", if (emojiBeside) 3.6f else 4.45f, KeyStyle.SPECIAL),
                 K(".", 0.85f, KeyStyle.SPECIAL),
                 if (gb) K("return", 1.5f, KeyStyle.ACCENT, R.drawable.ic_enter) else K("return", 1.5f, KeyStyle.ACCENT))))
-        holder.addView(card, LinearLayout.LayoutParams(-1, -2))
+        val oneHand = if (page == Page.LAYOUT) Prefs.str(this, "onehand", "off") else "off"
+        if (oneHand == "off") holder.addView(card, LinearLayout.LayoutParams(-1, -2))
+        else holder.addView(LinearLayout(this).apply {
+            // the real keyboard keeps 78% of the width and hugs one side, the other 22% stays free
+            if (oneHand == "right") addView(android.view.View(context), LinearLayout.LayoutParams(0, 1, 0.22f))
+            addView(card, LinearLayout.LayoutParams(0, -2, 0.78f))
+            if (oneHand == "left") addView(android.view.View(context), LinearLayout.LayoutParams(0, 1, 0.22f))
+        }, LinearLayout.LayoutParams(-1, -2))
+        if (page == Page.LAYOUT) {
+            // the phone's gesture bar under the keyboard, so Bottom spacing reads as the lift above it
+            val lift = (Prefs.int(this, "bottom_pad", 0).dp * scale).toInt()
+            holder.addView(FrameLayout(this).apply {
+                addView(android.view.View(context).apply {
+                    background = android.graphics.drawable.GradientDrawable().apply { cornerRadius = 100.dp.toFloat(); setColor(ui.onSurfaceVar) }
+                    alpha = 0.35f
+                }, FrameLayout.LayoutParams(84.dp, 4.dp, Gravity.CENTER_HORIZONTAL or Gravity.BOTTOM).apply { bottomMargin = 4.dp })
+            }, LinearLayout.LayoutParams(-1, 12.dp + lift))
+        }
         val after = ArrayList<KeyView>().also { collectKeys(card, it) }
         // dragging a slider rebuilds the preview every step: only a change after a pause morphs (same rule as the text), a drag just snaps
         val nowMs = android.os.SystemClock.uptimeMillis()

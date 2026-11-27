@@ -43,8 +43,8 @@ object TypingSound {
 
     /** Sound styles shown in Settings: folder name -> label. "system" has no folder: it uses the device's own key sounds. */
     val STYLES = listOf(
-        FOLLOW_THEME to "Ikuti tema",
-        "system" to "Bawaan (suara sistem)", "ios" to "iOS",
+        FOLLOW_THEME to "Follow theme",
+        "system" to "System default", "ios" to "iOS",
         "thock1" to "Thock A · foam", "thock2" to "Thock B · tofu65", "thock3" to "Thock C · deep",
         "glass" to "Glass · soft tink", "paper" to "Paper · pencil tap", "terminal" to "Terminal · teletype", "mechanical" to "Mechanical · clicky",
         "neu" to "Clay · soft pillow", "pixel" to "Pixel · 8-bit blip", "lcd" to "LCD · keypad tone",
