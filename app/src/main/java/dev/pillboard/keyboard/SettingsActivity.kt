@@ -34,16 +34,26 @@ import androidx.core.view.WindowInsetsCompat
 /** Home + subpages (Typing, Appearance, Feedback, Advanced, About) with search. One activity, in-place navigation. */
 class SettingsActivity : Activity() {
 
-    private enum class Page(val label: String, val sub: String, val icon: Int = 0, val tile: Int = 0) {
+    private enum class Page(val label: String, val sub: String, val icon: Int = 0, val tile: Int = 0, val parent: Page? = null) {
         HOME("Glimkey", ""),
         TYPING("Typing", "Suggestions, learning, auto-correction, capitalization", R.drawable.ic_set_typing, 0xFF0A84FF.toInt()),
         TRANSLATE("Translation", "Online translate, target language", R.drawable.ic_translate, 0xFF32ADE6.toInt()),
-        APPEARANCE("Appearance", "Colors, shape, spacing, height", R.drawable.ic_set_look, 0xFFBF5AF2.toInt()),
+        APPEARANCE("Appearance", "Theme, colors, glass, keys, effects", R.drawable.ic_set_look, 0xFFBF5AF2.toInt()),
+        LOOK_THEME("Theme & mode", "Keyboard theme, light / dark", R.drawable.ic_set_look, 0xFFBF5AF2.toInt(), parent = APPEARANCE),
+        LOOK_COLOR("Colors", "Accent color, three-tone accent", R.drawable.ic_set_look, 0xFFFF375F.toInt(), parent = APPEARANCE),
+        LOOK_GLASS("Glass & blur", "Backdrop blur, tint, refraction, lens", R.drawable.ic_set_look, 0xFF32ADE6.toInt(), parent = APPEARANCE),
+        LOOK_KEYS("Keys", "Height, shape, spacing, key preview", R.drawable.ic_set_layout, 0xFFFF9F0A.toInt(), parent = APPEARANCE),
+        LOOK_FX("Effects", "Tap effect, back effect, effect color", R.drawable.ic_set_feedback, 0xFF30B650.toInt(), parent = APPEARANCE),
         LAYOUT("Layout", "Layout style, number row, emoji key, strip button", R.drawable.ic_set_layout, 0xFFFF9F0A.toInt()),
         FEEDBACK("Feedback", "Haptics", R.drawable.ic_set_feedback, 0xFF30B650.toInt()),
         ADVANCED("Advanced", "Learned words, reset, emoji history", R.drawable.ic_set_more, 0xFF8E8E93.toInt()),
         ABOUT("About", "Version, license, credits", R.drawable.ic_set_info, 0xFF5AB8E8.toInt()),
     }
+
+    /** 0 = Home, 1 = a page, 2 = a sub-page; going deeper arrives from the right. */
+    private fun depth(p: Page) = when { p == Page.HOME -> 0; p.parent == null -> 1; else -> 2 }
+    private fun isPreviewPage(p: Page) = p.parent == Page.APPEARANCE || p == Page.LAYOUT
+    private fun up() = go(page.parent ?: Page.HOME)
 
     /** Single source of truth: pages and search both render from this list. */
     private class Item(val page: Page, val title: String, val keys: String, val visible: () -> Boolean = { true }, val make: () -> View)
@@ -145,51 +155,51 @@ class SettingsActivity : Activity() {
                 ui.cycle("Emoji key position", "emoji_pos", "capsule", listOf("capsule" to "On the strip button (swipe or hold)", "comma" to "Next to the comma key")) { refreshPreview(); renderBody() }
             },
             Item(Page.ADVANCED, "Clear recent emoji", "emoji recent history forget") { ui.link("Clear recent emoji", "Forget the emoji you used lately", chevron = false) { EmojiData.clearRecents(this) } },
-            Item(Page.APPEARANCE, "Theme", "theme style paper terminal mechanical liquid glass skin look") {
+            Item(Page.LOOK_THEME, "Theme", "theme style paper terminal mechanical liquid glass skin look") {
                 ui.themePicker { refreshPreview(); renderBody() }
             },
             // one mode for the keyboard AND this app: recreate so both wear it
-            Item(Page.APPEARANCE, "Mode", "dark light night theme mode system appearance") {
+            Item(Page.LOOK_THEME, "Mode", "dark light night theme mode system appearance") {
                 ui.segmentRow("Mode", "mode", "system", listOf("system" to "System", "light" to "Light", "dark" to "Dark")) { recreate() }
             },
-            Item(Page.APPEARANCE, "Accent color", "palette preset color material you dynamic wallpaper pixel style hue custom tonal vivid muted bold", visible = { KbTheme.current(this).isGlass }) {
+            Item(Page.LOOK_COLOR, "Accent color", "palette preset color material you dynamic wallpaper pixel style hue custom tonal vivid muted bold", visible = { KbTheme.current(this).isGlass }) {
                 ui.accent { refreshPreview() }
             },
-            Item(Page.APPEARANCE, "Three-tone accent", "primary secondary tertiary pixel material you colors palette accent", visible = { KbTheme.current(this).isGlass }) {
+            Item(Page.LOOK_COLOR, "Three-tone accent", "primary secondary tertiary pixel material you colors palette accent", visible = { KbTheme.current(this).isGlass }) {
                 ui.toggle("Three-tone accent", "Like Pixel: primary on Enter, secondary on special keys, tertiary on Shift", "tritone", true,
                     onChange = { refreshPreview(); renderBody() })
             },
-            Item(Page.APPEARANCE, "Blur background", "frosted glass", visible = { KbTheme.current(this).isGlass }) {
+            Item(Page.LOOK_GLASS, "Blur background", "frosted glass", visible = { KbTheme.current(this).isGlass }) {
                 ui.toggle("Blur background",
                     if (blurOk) "Liquid Glass backdrop blur" else "Glass tint fallback; system blur unavailable",
                     "blur", false, enabled = true, onChange = { blurStatusValue?.setTextBlur(blurStatus()) })
             },
-            Item(Page.APPEARANCE, "Blur tint", "blur tint opacity transparency glass shell frosted clear see through", visible = { KbTheme.current(this).isGlass }) {
+            Item(Page.LOOK_GLASS, "Blur tint", "blur tint opacity transparency glass shell frosted clear see through", visible = { KbTheme.current(this).isGlass }) {
                 ui.slider("Blur tint", 10, 100, "blur_tint", 62, listOf("Clear" to 30, "Standard" to 62, "Frosted" to 85), unit = "%") { refreshPreview() }
             },
-            Item(Page.APPEARANCE, "Blur status", "blur glass system available blocked", visible = { KbTheme.current(this).isGlass }) {
+            Item(Page.LOOK_GLASS, "Blur status", "blur glass system available blocked", visible = { KbTheme.current(this).isGlass }) {
                 ui.info("Blur status", blurStatus()).also { blurStatusValue = it.findViewWithTag<BlurTextView>("value") }
             },
-            Item(Page.APPEARANCE, "Liquid refraction", "glass refraction edge bevel dispersion bend background shell", visible = { KbTheme.current(this).isGlass }) {
+            Item(Page.LOOK_GLASS, "Liquid refraction", "glass refraction edge bevel dispersion bend background shell", visible = { KbTheme.current(this).isGlass }) {
                 ui.toggle("Liquid refraction",
                     if (Build.VERSION.SDK_INT >= 33) "The glass edge bends the keys near it, with a faint color fringe" else "Needs Android 13+",
                     "refract", false, enabled = Build.VERSION.SDK_INT >= 33, onChange = { refreshPreview() })
             },
-            Item(Page.APPEARANCE, "Liquid lens", "refraction lens magnifier key preview glass", visible = { KbTheme.current(this).isGlass }) {
+            Item(Page.LOOK_GLASS, "Liquid lens", "refraction lens magnifier key preview glass", visible = { KbTheme.current(this).isGlass }) {
                 ui.toggle("Liquid lens",
                     if (Build.VERSION.SDK_INT >= 33) "Key preview refracts the keys around it" else "Needs Android 13+, using the plain bubble",
                     "lens", true, enabled = Build.VERSION.SDK_INT >= 33)
             },
-            Item(Page.APPEARANCE, "Key preview", "popup bubble character magnify") {
+            Item(Page.LOOK_KEYS, "Key preview", "popup bubble character magnify") {
                 ui.toggle("Key preview", "Floating character bubble above the pressed key", "keypreview", true)
             },
-            Item(Page.APPEARANCE, "Key height", "size tall short dp") {
+            Item(Page.LOOK_KEYS, "Key height", "size tall short dp") {
                 ui.slider("Key height", 42, 62, "key_h", 50, listOf("Short" to 44, "Standard" to 50, "Tall" to 58)) { refreshPreview() }
             },
-            Item(Page.APPEARANCE, "Key shape", "radius corner round square") {
+            Item(Page.LOOK_KEYS, "Key shape", "radius corner round square") {
                 ui.slider("Key shape", 2, 20, KbTheme.current(this).keyRKey, KbTheme.current(this).keyRadiusDp, listOf("Square" to 2, "Standard" to KbTheme.current(this).keyRadiusDp, "Round" to 18)) { refreshPreview() }
             },
-            Item(Page.APPEARANCE, "Key spacing", "gap margin tight") {
+            Item(Page.LOOK_KEYS, "Key spacing", "gap margin tight") {
                 ui.slider("Key spacing", 2, 6, KbTheme.current(this).keyGapKey, KbTheme.current(this).keyGapDp, listOf("Tight" to 2, "Standard" to KbTheme.current(this).keyGapDp, "Roomy" to 5)) { refreshPreview() }
             },
             Item(Page.FEEDBACK, "Haptic feedback", "vibration vibrate") { ui.toggle("Haptic feedback", "Vibrate on key press", "haptic", true) { renderBody(animate = true) } },
@@ -218,13 +228,13 @@ class SettingsActivity : Activity() {
             Item(Page.FEEDBACK, "Sound style", "android ios thock boba tofu foam click style") {
                 ui.cycle("Sound style", "sound_style", TypingSound.styleOf(this), TypingSound.STYLES) { TypingSound.release(); TypingSound.play(this, TypingSound.Kind.STANDARD) }
             },
-            Item(Page.FEEDBACK, "Tap effect", "tap effect animation ripple sparkle hearts bubbles confetti petals keys cafe") {
+            Item(Page.LOOK_FX, "Tap effect", "tap effect animation ripple sparkle hearts bubbles confetti petals keys cafe") {
                 ui.cycle("Tap effect", TapEffect.PREF, TapEffect.current(this).id, TapEffect.STYLES) { }
             },
-            Item(Page.FEEDBACK, "Back effect", "back effect behind keys press glow paint splat glow ink bloom") {
+            Item(Page.LOOK_FX, "Back effect", "back effect behind keys press glow paint splat glow ink bloom") {
                 ui.cycle("Back effect", BackEffect.PREF, BackEffect.current(this).id, BackEffect.styles(this)) { refreshPreview() }
             },
-            Item(Page.FEEDBACK, "Tap effect color", "tap effect color rainbow accent") {
+            Item(Page.LOOK_FX, "Tap effect color", "tap effect color rainbow accent") {
                 ui.cycle("Tap effect color", TapEffect.COLOR_PREF, "auto", TapEffect.COLORS) { }
             },
             Item(Page.FEEDBACK, "Sound volume", "volume loud quiet click") {
@@ -373,7 +383,7 @@ class SettingsActivity : Activity() {
             addView(ImageView(context).apply {
                 setImageResource(R.drawable.ic_chevron_left); imageTintList = ColorStateList.valueOf(ui.onSurface)
             }, FrameLayout.LayoutParams(24.dp, 24.dp, Gravity.CENTER))
-            setOnClickListener { go(Page.HOME) }
+            setOnClickListener { up() }
         }
         addView(navBack, FrameLayout.LayoutParams(40.dp, 40.dp, Gravity.START or Gravity.CENTER_VERTICAL).apply { marginStart = 16.dp })
         // full width so the old title keeps its room while it Blur-Replaces into the new one (it passes touches to Back)
@@ -398,7 +408,7 @@ class SettingsActivity : Activity() {
     override fun onBackPressed() {
         when {
             query.isNotEmpty() -> { query = ""; setSearchText(""); renderBody(animate = true, dir = BlurDir.DOWN) }
-            page != Page.HOME -> go(Page.HOME)
+            page != Page.HOME -> up()
             else -> super.onBackPressed()
         }
     }
@@ -420,7 +430,7 @@ class SettingsActivity : Activity() {
      */
     private fun go(p: Page, from: View? = null) {
         val leaving = page
-        val forward = p != Page.HOME
+        val forward = depth(p) > depth(leaving)
         pageDir = if (forward) BlurDir.LEFT else BlurDir.RIGHT
         motion.swap(
             content, pageDir, kids = { listOf(pinned, scroll) },
@@ -498,9 +508,9 @@ class SettingsActivity : Activity() {
         if (page == Page.HOME) { searchBar.visibility = View.VISIBLE; searchBar.animate().alpha(1f).setDuration(220).start(); (searchBar as? GlassBar)?.pulse(700) }
         else searchBar.animate().alpha(0f).setDuration(140).withEndAction { if (page != Page.HOME) searchBar.visibility = View.GONE }.start()
         navTitle.setTextBlur(page.label, dir = pageDir)
-        // the keyboard preview lives on Appearance and Layout (the pages whose options change it), pinned under the nav bar so every change is visible while adjusting it
+        // the keyboard preview lives on the Appearance sub-pages and Layout (the pages whose options change it), pinned under the nav bar so every change is visible while adjusting it
         pinned.removeAllViews()
-        if (page == Page.APPEARANCE || page == Page.LAYOUT) {
+        if (isPreviewPage(page)) {
             previewHolder = LinearLayout(this).also { pinned.addView(it, FrameLayout.LayoutParams(-1, -2)) }
             pinned.visibility = View.VISIBLE
             buildPreview()
@@ -523,6 +533,7 @@ class SettingsActivity : Activity() {
         when {
             page == Page.HOME && query.isNotBlank() -> searchResults()
             page == Page.HOME -> home()
+            page == Page.APPEARANCE -> appearanceHub()
             page == Page.ABOUT -> {
                 body.addView(ui.section("Project"))
                 body.addView(ui.box(listOf(aboutItem("Source code"), aboutItem("Report an issue")), inset = ui.tileInset), ui.lp())
@@ -550,6 +561,16 @@ class SettingsActivity : Activity() {
             body.addView(ui.section("Results"))
             body.addView(ui.box(hits.map { it.make() }), ui.lp())
         }
+    }
+
+    /** Appearance is a menu: each sub-page holds one family of options (Colors and Glass only exist for Liquid Glass). */
+    private fun appearanceHub() {
+        val glass = KbTheme.current(this).isGlass
+        val subs = listOf(Page.LOOK_THEME, Page.LOOK_COLOR, Page.LOOK_GLASS, Page.LOOK_KEYS, Page.LOOK_FX)
+            .filter { glass || (it != Page.LOOK_COLOR && it != Page.LOOK_GLASS) }
+        body.addView(ui.box(subs.map { p -> pageLink(p) }, inset = ui.tileInset), ui.lp())
+        if (!glass) body.addView(ui.caption("Colors and Glass & blur are for the Liquid Glass theme. Other themes bring their own palette.")
+            .apply { textSize = 13f; setPadding(20.dp, 4.dp, 20.dp, 0) })
     }
 
     private fun home() {
