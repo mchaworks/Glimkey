@@ -256,3 +256,27 @@ Research basis: Apple WWDC25 "Get to know the new design system" (concentricity,
 - **Switch:** iOS 26 capsule thumb that stretches on press, with a Material check growing inside when on.
 - **Slider:** white capsule thumb with hairline and lift on a thicker accent track.
 - **Dialogs** (stats, pickers, reset, haptic test) share the card colour, a 28dp corner and accent buttons.
+
+## Settings motion (matches the keyboard)
+
+The settings app now moves with the keyboard's own tokens (`SettingsFeel`, mirrored from `KbTokens` for the Glass theme: key spring 0.62/22, pop spring 0.70/30, flow spring 0.78/28, press 65ms).
+
+- **Press:** rows, buttons, theme cards, accent chips and "Reset" shrink in 65ms and spring back on release (`SettingsFeel.press`, never consumes the touch). Ripple stays.
+- **Switch:** the thumb springs to the new state on the pop spring and stretches while it travels; track tone and check mark are clamped (a spring overshoots, a colour must not). Press = quick stretch, release = key spring.
+- **Segmented:** the pill glides on the flow spring and stretches a little along its way.
+- **Content change without a page change** (`SettingsMotion.flow`, used by `renderBody(animate = true)` with no direction): no page-wide blur any more. Cards keep their place and slide to the new one on the flow spring; a card that grows opens out of its old rect (container morph); one that shrinks folds into its new rect as a fading picture; new cards arrive from blur; switches and segmented controls that changed replay their spring from the old state (matched by `contentDescription`). Cards are matched by position.
+- **Page change** (`SettingsMotion.swap`): still Blur Replace, but the row <-> page container morph now runs on the shared timeline (no overshoot at the screen edge), like the translate dock.
+- **Search results** keep Blur Replace (`renderBody(animate = true, dir = ...)`).
+- **Fades** (search capsule, recreate fade) use the text timeline (`IN_MS`/`OUT_MS` + `inEase`/`outEase`) instead of ad-hoc durations.
+- Not compiled or run on device (no Android SDK in the authoring sandbox). Tune first: `SettingsFeel` springs, the 0.985 / 0.96 / 0.88 press scales, `PillSwitch` travel stretch (5dp), `Segmented` glide (12% of a segment).
+
+## Notes (strip button feature)
+
+A new strip-button feature, **Notes** (`StripFeature.NOTES`, swipe order: after Clipboard). Saved on the device only (`NoteStore`, private preferences, JSON), newest first; the title is the note's first line, a note emptied of text is deleted.
+
+- **List panel** (`Panel.NOTES`, same Blur Replace shell swap and footprint as the clipboard): a key-coloured card per note with title, a two-line preview and "2 min ago · 14 words". Tap = open in the editor, **Insert** = write the note into the app's field and go back, the cross = delete (it asks twice: it turns into "Delete?" for 2.5s). "New" in the bar starts an empty note.
+- **Editor = the translate dock** (`buildNoteDock`, `translateMode` + `noteMode`): the same dock box, shortened key rows and key-coloured card as Translate. Top row: close (saves), the title, its state (Editing -> Saved, Blur Replace), the note list, Insert. The card shows the note and scrolls to keep the caret in view. It opens out of the list panel with the panel swap and closes with the dock's own exit morph.
+- **Typing goes into the note.** `getCurrentInputConnection()` returns a `NoteConnection` while a note is open, so every key, backspace repeat, Enter (newline), auto-capitalisation, double-space period and the strip capsule's Select all / Undo / Redo / the Text editing panel work on the note exactly as on an app's field. `NoteBuffer` holds the text, the selection and an undo history; `realConnection()` is the app's field (what Insert writes to).
+- **Caret and selection** are drawn by `NoteView` (the keyboard window never has focus, so a real EditText would show none): a soft blinking caret (steady while typing, off with animations off), tap to place it, long press to select a word.
+- Autosave 700ms after the last change and whenever the dock closes (`stopTranslateState` -> `endNote`), so changing app or field never loses a note. No suggestion strip while the dock is open (same as Translate).
+- Not compiled or tried on a device. First things to check: the `NoteConnection` overrides against your SDK's nullability annotations, caret alignment in `NoteView`, and the dock's 112dp height for longer notes.

@@ -437,8 +437,8 @@ class SettingsActivity : Activity() {
             // stays hidden through the fade and glasses in once the page is solid
             val home = page == Page.HOME
             rootCol.alpha = 0f; if (home) searchBar.alpha = 0f
-            rootCol.animate().alpha(1f).setDuration(180).withEndAction {
-                if (home) { searchBar.animate().alpha(1f).setDuration(160).start(); (searchBar as? GlassBar)?.pulse(900) }
+            rootCol.animate().alpha(1f).setDuration(BlurTextTokens.IN_MS).setInterpolator(BlurTextTokens.inEase).withEndAction {
+                if (home) { searchBar.animate().alpha(1f).setDuration(BlurTextTokens.IN_MS).setInterpolator(BlurTextTokens.inEase).start(); (searchBar as? GlassBar)?.pulse(900) }
             }.start()
             val y = savedInstanceState.getInt("scrollY", 0)
             if (y > 0) scroll.doOnLayout { it.scrollTo(0, y) }
@@ -583,8 +583,8 @@ class SettingsActivity : Activity() {
         navBack.visibility = if (page == Page.HOME) View.GONE else View.VISIBLE
         applyColPad()
         searchBar.animate().cancel()
-        if (page == Page.HOME) { searchBar.visibility = View.VISIBLE; searchBar.animate().alpha(1f).setDuration(220).start(); (searchBar as? GlassBar)?.pulse(700) }
-        else searchBar.animate().alpha(0f).setDuration(140).withEndAction { if (page != Page.HOME) searchBar.visibility = View.GONE }.start()
+        if (page == Page.HOME) { searchBar.visibility = View.VISIBLE; searchBar.animate().alpha(1f).setDuration(BlurTextTokens.IN_MS).setInterpolator(BlurTextTokens.inEase).start(); (searchBar as? GlassBar)?.pulse(700) }
+        else searchBar.animate().alpha(0f).setDuration(BlurTextTokens.OUT_MS).setInterpolator(BlurTextTokens.outEase).withEndAction { if (page != Page.HOME) searchBar.visibility = View.GONE }.start()
         navTitle.setTextBlur(page.label, dir = pageDir)
         // the keyboard preview lives on the Appearance sub-pages and Layout (the pages whose options change it), pinned under the nav bar so every change is visible while adjusting it
         pinned.removeAllViews()
@@ -598,11 +598,14 @@ class SettingsActivity : Activity() {
     }
 
     /**
-     * Rebuild the body. [animate]: the old cards Blur-Replace into the new ones (a value that changed, rows that came or
-     * went, search results); typing faster than RAPID_GAP_MS just swaps. The page change does its own swap.
+     * Rebuild the body. [animate] without [dir]: the content flows to its new state (a value that changed, a switch that
+     * flipped, rows that came or went; see [SettingsMotion.flow]). With a [dir] (search results) the old cards Blur-Replace
+     * into the new ones; typing faster than RAPID_GAP_MS just swaps. The page change does its own swap.
      */
-    private fun renderBody(animate: Boolean = false, dir: BlurDir = BlurDir.UP) {
+    private fun renderBody(animate: Boolean = false, dir: BlurDir? = null) {
         if (!animate) { buildBody(); return }
+        // no direction: the page stays and its content flows (springs) to the new state; a direction: the content is replaced
+        if (dir == null) { motion.flow(body) { buildBody() }; return }
         motion.swap(body, dir, kids = { (0 until body.childCount).map { body.getChildAt(it) } }, minGapMs = BlurTextTokens.RAPID_GAP_MS) { buildBody() }
     }
 

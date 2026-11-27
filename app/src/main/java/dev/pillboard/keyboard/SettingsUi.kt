@@ -158,6 +158,7 @@ class SettingsUi(private val a: Activity) {
         backgroundTintList = ColorStateList.valueOf(if (filled) primary else ColorUtils.setAlphaComponent(primary, if (night) 0x38 else 0x24))
         setTextColor(if (filled) onPrimary else primary)
         setOnClickListener { onClick() }
+        SettingsFeel.press(this, 0.96f)
     }
 
     /** [minW]: a floor for the width, so a label that changes (Active / Not enabled) Blur-Replaces inside a steady pill. */
@@ -198,6 +199,7 @@ class SettingsUi(private val a: Activity) {
     private fun ripple(v: View) {
         val t = a.obtainStyledAttributes(intArrayOf(android.R.attr.selectableItemBackground))
         v.foreground = t.getDrawable(0); t.recycle()
+        SettingsFeel.press(v, 0.985f)              // a row dips like a key and springs back
     }
 
     private fun row() = LinearLayout(a).apply {
@@ -242,6 +244,7 @@ class SettingsUi(private val a: Activity) {
         stack().apply {
             addView(TextView(a).apply { text = title; textSize = 17f; setTextColor(onSurface) })
             addView(Segmented(a, options.map { it.second }, segTrack, segPill, onSurface, onSurfaceVar, medium).apply {
+                contentDescription = title                 // lets a rebuilt row replay its glide from the old choice
                 select(options.indexOfFirst { it.first == Prefs.str(a, key, def) }, false)
                 onSelect = { i -> Prefs.setStr(a, key, options[i].first); onChange() }
             }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = 12.dp })
@@ -351,6 +354,7 @@ class SettingsUi(private val a: Activity) {
                 text = "Reset"; textSize = 14f; setTextColor(primary); typeface = medium
                 setPadding(12.dp, 6.dp, 0, 6.dp)
                 setOnClickListener { s.value = def.toFloat() }
+                SettingsFeel.press(this, 0.9f)
             }
             fun show(v: Int, animate: Boolean) {
                 val txt = "$v$unit"
@@ -412,6 +416,7 @@ class SettingsUi(private val a: Activity) {
                 }
             }, FrameLayout.LayoutParams(44.dp, 44.dp, Gravity.CENTER))
             setOnClickListener { e.pick() }
+            SettingsFeel.press(this, 0.88f)
         }
         fun refresh() {
             val list = entries()
@@ -486,6 +491,7 @@ class SettingsUi(private val a: Activity) {
                         LinearLayout.LayoutParams(-2, -2).apply { topMargin = 8.dp; marginStart = 4.dp })
                     addView(TextView(a).apply { text = th.blurb; textSize = 12f; setTextColor(onSurfaceVar) },
                         LinearLayout.LayoutParams(-2, -2).apply { marginStart = 4.dp })
+                    SettingsFeel.press(this, 0.96f)
                     setOnClickListener {
                         if (KbTheme.current(a) != th) { Prefs.setStr(a, KbTheme.PREF, th.id); refresh(); onChange() }
                     }

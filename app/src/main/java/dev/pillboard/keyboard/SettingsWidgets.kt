@@ -12,11 +12,13 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.accessibility.AccessibilityNodeInfo
 import androidx.core.graphics.ColorUtils
+import kotlin.math.PI
+import kotlin.math.sin
 
 /**
  * iOS 26 switch (a wide capsule thumb on a capsule track) with Material 3 Expressive touches: the thumb stretches while
- * pressed, a check mark grows inside it when on, and the track tone flows to the new state on the same smooth ease as the
- * keyboard's Blur Replace (no spring, no overshoot).
+ * pressed and while it travels, a check mark grows inside it when on, and the thumb springs to the new state on the
+ * keyboard's pop spring ([SettingsFeel]); the track tone follows, clamped (a spring overshoots, a colour must not).
  */
 @SuppressLint("ViewConstructor")
 internal class PillSwitch(
@@ -49,8 +51,8 @@ internal class PillSwitch(
         val to = if (v) 1f else 0f
         if (!animate || !animationsOn(context) || !isAttachedToWindow) { progress = to; invalidate(); return }
         moveAnim = ValueAnimator.ofFloat(progress, to).apply {
-            duration = 260L
-            interpolator = BlurTextTokens.outEase
+            duration = SettingsFeel.pop.settleMs
+            interpolator = SettingsFeel.pop
             addUpdateListener { progress = it.animatedValue as Float; invalidate() }
             start()
         }
@@ -62,8 +64,9 @@ internal class PillSwitch(
         pressAnim?.cancel()
         if (!animationsOn(context)) { stretch = v; invalidate(); return }
         pressAnim = ValueAnimator.ofFloat(stretch, v).apply {
-            duration = 140L
-            interpolator = BlurTextTokens.outEase
+            // like a key: quick on the way down, spring on the way back
+            duration = if (v > 0f) SettingsFeel.PRESS_MS else SettingsFeel.spring.settleMs
+            interpolator = if (v > 0f) BlurTextTokens.outEase else SettingsFeel.spring
             addUpdateListener { stretch = it.animatedValue as Float; invalidate() }
             start()
         }
@@ -73,23 +76,25 @@ internal class PillSwitch(
 
     override fun onDraw(c: Canvas) {
         val w = width.toFloat(); val h = height.toFloat()
-        track.color = ColorUtils.blendARGB(offColor, onColor, progress)
-        thumb.color = ColorUtils.blendARGB(thumbColor, thumbOnColor, progress)
+        val p = progress.coerceIn(0f, 1f)               // the thumb may overshoot on the spring; tone and mark may not
+        track.color = ColorUtils.blendARGB(offColor, onColor, p)
+        thumb.color = ColorUtils.blendARGB(thumbColor, thumbOnColor, p)
         r.set(0f, 0f, w, h)
         c.drawRoundRect(r, h / 2f, h / 2f, track)
         val d = h - inset * 2f
-        val tw = d * 1.3f + stretch * 6.dp
+        val travel = 4f * p * (1f - p)                   // 0 at rest, 1 half way: the thumb stretches while it travels
+        val tw = (d * 1.3f + stretch * 6.dp + travel * 5.dp).coerceAtLeast(d)
         val left = inset + (w - inset * 2f - tw) * progress
         r.set(left, inset, left + tw, inset + d)
         c.drawRoundRect(r, d / 2f, d / 2f, thumb)
         c.drawRoundRect(r, d / 2f, d / 2f, ring)
-        if (progress > 0.02f) {
+        if (p > 0.02f) {
             // check mark grows in with the track tone
-            val cx = r.centerX(); val cy = r.centerY(); val k = d / 28f * progress
+            val cx = r.centerX(); val cy = r.centerY(); val k = d / 28f * p
             markPath.reset()
             markPath.moveTo(cx - 4.5f * k, cy + 0.4f * k); markPath.lineTo(cx - 1.4f * k, cy + 3.4f * k); markPath.lineTo(cx + 4.6f * k, cy - 3.2f * k)
             mark.strokeWidth = 2.2f * k.coerceAtLeast(0.01f)
-            mark.alpha = (255 * progress).toInt()
+            mark.alpha = (255 * p).toInt()
             c.drawPath(markPath, mark)
         }
     }
@@ -132,6 +137,7 @@ internal class Segmented(
 
     private var pos = 0f           // animated segment position (in segments)
     private var pillAlpha = 0f
+    private var glide = 0f         // 0..1..0 while the pill travels: it stretches along its way
     private var anim: ValueAnimator? = null
     private val bg = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = trackColor }
     private val pill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = pillColor }
@@ -154,9 +160,18 @@ internal class Segmented(
             pos = toPos; pillAlpha = toA; invalidate(); return
         }
         anim = ValueAnimator.ofFloat(0f, 1f).apply {
-            duration = 260L
-            interpolator = BlurTextTokens.outEase
-            addUpdateListener { val f = it.animatedValue as Float; pos = from + (toPos - from) * f; pillAlpha = fromA + (toA - fromA) * f; invalidate() }
+            duration = SettingsFeel.flow.settleMs
+            interpolator = SettingsFeel.flow
+            addUpdateListener {
+                val f = it.animatedValue as Float
+                pos = from + (toPos - from) * f
+                pillAlpha = (fromA + (toA - fromA) * f).coerceIn(0f, 1f)
+                glide = sin(PI * it.animatedFraction.coerceIn(0f, 1f)).toFloat().coerceAtLeast(0f) * if (toPos != from) 1f else 0f
+                invalidate()
+            }
+            addListener(object : android.animation.AnimatorListenerAdapter() {
+                override fun onAnimationEnd(animation: android.animation.Animator) { glide = 0f; invalidate() }
+            })
             start()
         }
     }
@@ -172,7 +187,8 @@ internal class Segmented(
         if (pillAlpha > 0.01f) {
             pill.alpha = (Color.alpha(pillColor) * pillAlpha).toInt()
             ring.alpha = (0x14 * pillAlpha).toInt()
-            r.set(pad + sw * pos, pad, pad + sw * (pos + 1f), h - pad)
+            val grow = glide * sw * 0.12f                  // the pill stretches a little along its way, like the switch thumb
+            r.set((pad + sw * pos - grow).coerceAtLeast(0f), pad, (pad + sw * (pos + 1f) + grow).coerceAtMost(w), h - pad)
             c.drawRoundRect(r, (h - pad * 2f) / 2f, (h - pad * 2f) / 2f, pill)
             c.drawRoundRect(r, (h - pad * 2f) / 2f, (h - pad * 2f) / 2f, ring)
         }

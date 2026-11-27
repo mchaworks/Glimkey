@@ -2,10 +2,11 @@ package dev.pillboard.keyboard
 
 import android.content.Context
 
-/** Features the top-right strip button can carry. Swipe up/down on the button cycles them; hold shows them all. */
+/** Features the top-right strip button can carry (Notes: saved notes, edited in a dock like Translate). Swipe up/down on the button cycles them; hold shows them all. */
 internal enum class StripFeature(val id: String, val label: String, val icon: Int) {
     TRANSLATE("translate", "Translate", R.drawable.ic_translate),
     CLIPBOARD("clipboard", "Clipboard", R.drawable.ic_clipboard),
+    NOTES("notes", "Notes", R.drawable.ic_notes),
     TEXT_EDIT("text_edit", "Text editing", R.drawable.ic_text_edit),
     EMOJI("emoji", "Emoji", R.drawable.ic_emoji),
     REPEAT("repeat", "Repeat last line", R.drawable.ic_redo),

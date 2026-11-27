@@ -29,7 +29,7 @@ Liquid Glass looks, Material 3 Expressive shapes, and a lot of small details tha
 | 🎨 **7 full themes** | Not just colours: each theme changes shape, material, motion, font and sound. See [THEMES.md](THEMES.md). |
 | 💥 **Tap effects** | Ripple, Sparkle, Hearts, Bubbles, Confetti, Petals, plus a back effect behind the keys. Works on any theme. |
 | 🧠 **Suggestions that learn** | Word bar, next-word prediction and typo-aware auto-correct. Indonesian and English work at the same time, picked from what you type. All learning stays on your device. |
-| 🌐 **Strip button** | One capsule on the word bar: Translate, Clipboard, Text editing, Emoji, Repeat last line, Settings. Swipe to switch, hold to see all. |
+| 🌐 **Strip button** | One capsule on the word bar: Translate, Clipboard, Notes, Text editing, Emoji, Repeat last line, Settings. Swipe to switch, hold to see all. |
 | 📳 **Real haptics and sound** | Haptic style, strength and per-key feel, an adaptive mode for fast typing, and a typing sound pack for every theme. |
 | 🔒 **Private by design** | No analytics. Nothing you type leaves the phone unless you turn on Translation yourself, and never in password fields. |
 

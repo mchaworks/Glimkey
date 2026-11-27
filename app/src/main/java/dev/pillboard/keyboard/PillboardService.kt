@@ -507,7 +507,7 @@ class PillboardService : InputMethodService() {
         else null
         r.removeAllViews()
         letterKeys.clear(); shiftKey = null; pageKey = null
-        if (panel != Panel.NONE) { strip = null; emojiGrid = null; r.addView(if (panel == Panel.CLIPBOARD) buildClipPanel() else buildEditPanel()); return }
+        if (panel != Panel.NONE) { strip = null; emojiGrid = null; r.addView(when (panel) { Panel.CLIPBOARD -> buildClipPanel(); Panel.NOTES -> buildNotesPanel(); else -> buildEditPanel() }); return }
         val keyH = keyHeight()
         val gb = Prefs.gboard(this)
         val numLabel = if (gb) "?123" else "123"
@@ -519,7 +519,7 @@ class PillboardService : InputMethodService() {
         strip = when {
             emojiMode && emojiSearch -> buildSearchBar().also { r.addView(it) }
             grid -> buildEmojiTabs().also { r.addView(it) }
-            translateMode -> buildTranslateDock().also { r.addView(it) }
+            translateMode -> (if (noteMode) buildNoteDock() else buildTranslateDock()).also { r.addView(it) }
             (Prefs.bool(this, "suggest", true) || Prefs.bool(this, "translate", false)) -> buildStrip().also { r.addView(it) }
             else -> null
         }
@@ -677,7 +677,7 @@ class PillboardService : InputMethodService() {
 
 
     // ---- panels (clipboard, text editing): the shell's whole content is replaced with Blur Replace ----
-    private enum class Panel { NONE, CLIPBOARD, EDIT }
+    private enum class Panel { NONE, CLIPBOARD, NOTES, EDIT }
     private var panel = Panel.NONE
     private var panelH = 0
     private var swapAnim: android.animation.ValueAnimator? = null
@@ -767,6 +767,255 @@ class PillboardService : InputMethodService() {
             background = tokens.stripItemBackground()
             setOnClickListener { onAction() }
         }, lp(WRAP_CONTENT, MATCH_PARENT))
+    }
+
+    // ---- notes: a list panel (read, insert, delete) and an editor that docks above the keys like Translate ----
+    // While a note is open the keyboard's input connection is a NoteConnection: every key, suggestion and editing tool types
+    // into the note instead of the app's field. Notes are saved on the device as you type; Insert puts one into the field.
+    private var noteMode = false
+    private var noteId = 0L
+    private var noteBuf: NoteBuffer? = null
+    private var noteConn: NoteConnection? = null
+    private var noteDirty = false
+    private var noteTitle: TextView? = null
+    private var noteStatus: BlurTextView? = null
+    private var notesList: LinearLayout? = null
+    private val noteSave = Runnable { saveNote() }
+
+    override fun getCurrentInputConnection(): InputConnection? = noteConn ?: super.getCurrentInputConnection()
+
+    /** The app's own field, even while a note is open (what Insert writes to). */
+    private fun realConnection(): InputConnection? {
+        val c = noteConn; noteConn = null
+        val r = currentInputConnection
+        noteConn = c
+        return r
+    }
+
+    private fun beginNote(n: Note?) {
+        stopTranslateState()
+        val anchor: View = host ?: root ?: return
+        val buf = NoteBuffer(n?.body ?: "")
+        noteId = n?.id ?: NoteStore.newId()
+        noteBuf = buf; noteDirty = false
+        buf.listeners.add { changed ->
+            if (changed) {
+                noteDirty = true
+                trHandler.removeCallbacks(noteSave); trHandler.postDelayed(noteSave, 700)
+                updateNoteDock(saved = false)
+            }
+        }
+        noteConn = NoteConnection(anchor, buf)
+        trAnim?.cancel()
+        translateMode = true; noteMode = true
+        lastFix = null
+    }
+
+    /** Saves and forgets the open note. Called from [stopTranslateState], so whatever closes the dock also closes the note. */
+    private fun endNote() {
+        if (!noteMode) return
+        trHandler.removeCallbacks(noteSave)
+        saveNote()
+        noteMode = false; noteConn = null
+        noteBuf?.listeners?.clear(); noteBuf = null
+        noteTitle = null; noteStatus = null
+    }
+
+    private fun saveNote() {
+        val b = noteBuf ?: return
+        if (!noteDirty) return
+        noteDirty = false
+        NoteStore.save(this, noteId, b.text.toString())
+        updateNoteDock(saved = true)
+    }
+
+    /** Opens [n] (or a new note) in the dock: the panel blurs away and the dock arrives with the keys under it. */
+    private fun openNote(n: Note?) = swapShell(BlurDir.DOWN) { panel = Panel.NONE; selecting = false; beginNote(n); render() }
+
+    private fun insertNote() {
+        val b = noteBuf ?: return
+        val t = b.text.toString()
+        if (t.isBlank()) return
+        saveNote()
+        val ic = realConnection() ?: return
+        lastFix = null
+        ic.commitText(t, 1)
+        stopTranslate()
+        afterEdit()
+    }
+
+    private fun updateNoteDock(saved: Boolean, animate: Boolean = true) {
+        val b = noteBuf ?: return
+        noteTitle?.text = if (b.text.isBlank()) "New note" else Note(noteId, b.text.toString(), 0L).title
+        val label = when { b.text.isBlank() -> ""; saved -> "Saved"; else -> "Editing" }
+        val st = noteStatus ?: return
+        if (st.text.toString() == label) return
+        if (animate) st.setTextBlur(label, minGapMs = BlurTextTokens.RAPID_GAP_MS) else st.text = label
+    }
+
+    /** The note editor: ✕, the title, its state, the note list and Insert on top, the note on a key-coloured card below (like the translate dock). */
+    private fun buildNoteDock(): LinearLayout {
+        val buf = noteBuf ?: NoteBuffer("")
+        val medium = ResourcesCompat.getFont(themed, R.font.gsr_medium)
+        val dimText = androidx.core.graphics.ColorUtils.setAlphaComponent(tokens.keyText, 0xB3)
+        fun holder(v: View) = FrameLayout(themed).apply { addView(v, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT)) }
+        val close = TextView(themed).apply {
+            text = "\u2715"; textSize = 16f; gravity = Gravity.CENTER
+            setTextColor(dimText); contentDescription = "Close note"
+            background = tokens.stripItemBackground()
+            setOnClickListener { stopTranslate() }
+        }
+        val title = TextView(themed).apply {
+            textSize = 14.5f; gravity = Gravity.CENTER_VERTICAL; maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.END
+            setPadding(8.dp, 0, 6.dp, 0); setTextColor(tokens.keyText)
+            if (medium != null) typeface = medium
+        }
+        val status = BlurTextView(themed).apply {
+            textSize = 12f; gravity = Gravity.CENTER_VERTICAL or Gravity.END
+            setTextColor(dimText); setPadding(0, 0, 8.dp, 0)
+        }
+        val all = android.widget.ImageView(themed).apply {
+            setImageResource(R.drawable.ic_notes)
+            imageTintList = android.content.res.ColorStateList.valueOf(tokens.keyText)
+            scaleType = android.widget.ImageView.ScaleType.CENTER_INSIDE
+            setPadding(9.dp, 9.dp, 9.dp, 9.dp); imageAlpha = 220
+            contentDescription = "All notes"
+            background = tokens.stripItemBackground()
+            setOnClickListener {
+                saveNote()
+                val r = root ?: return@setOnClickListener
+                panelH = (r.height - r.paddingTop - r.paddingBottom).coerceAtLeast(180.dp)
+                swapShell(BlurDir.UP) { stopTranslateState(); panel = Panel.NOTES; render() }
+            }
+        }
+        val insert = TextView(themed).apply {
+            text = "Insert"; textSize = 14f; gravity = Gravity.CENTER
+            setPadding(14.dp, 0, 14.dp, 0); setTextColor(tokens.keyText)
+            if (medium != null) typeface = medium
+            background = tokens.stripItemBackground()
+            setOnClickListener { insertNote() }
+        }
+        val closeH = holder(close); val allH = holder(all); val insH = holder(insert)
+        val row = LinearLayout(themed).apply {
+            orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false
+            addView(closeH, LinearLayout.LayoutParams(40.dp, MATCH_PARENT))
+            addView(title, LinearLayout.LayoutParams(0, MATCH_PARENT, 1f))
+            addView(status, LinearLayout.LayoutParams(WRAP_CONTENT, MATCH_PARENT))
+            addView(allH, LinearLayout.LayoutParams(38.dp, MATCH_PARENT))
+            addView(insH, LinearLayout.LayoutParams(WRAP_CONTENT, MATCH_PARENT))
+        }
+        val rad = Prefs.keyRadius(this).dp.toFloat()
+        val view = NoteView(themed, buf, tokens.accent).apply {
+            textSize = 15.5f; setPadding(12.dp, 8.dp, 12.dp, 8.dp)
+            setTextColor(tokens.keyText); setHintTextColor(dimText); hint = "Write a note\u2026"
+        }
+        val card = android.widget.ScrollView(themed).apply {
+            isVerticalScrollBarEnabled = false; overScrollMode = View.OVER_SCROLL_NEVER; isFillViewport = true
+            background = ColorDrawable(tokens.key)
+            outlineProvider = object : android.view.ViewOutlineProvider() {
+                override fun getOutline(v: View, outline: android.graphics.Outline) { outline.setRoundRect(0, 0, v.width, v.height, rad) }
+            }
+            clipToOutline = true
+            addView(view, FrameLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+        }
+        val content = LinearLayout(themed).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(3.dp, 3.dp, 3.dp, 3.dp)
+            addView(row, LinearLayout.LayoutParams(MATCH_PARENT, 36.dp))
+            addView(card, LinearLayout.LayoutParams(MATCH_PARENT, 0, 1f).apply { topMargin = 3.dp })
+        }
+        trParts = listOf(closeH, allH, insH, card)
+        trContent = content
+        content.translationY = shellTop.toFloat()
+        val dock = LinearLayout(themed).apply {
+            orientation = LinearLayout.VERTICAL
+            clipChildren = true
+            layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, trDockH).apply { setMargins(3.dp, 0, 3.dp, 3.dp) }
+            addView(content, LinearLayout.LayoutParams(MATCH_PARENT, trDockH))
+        }
+        trDock = dock
+        noteTitle = title; noteStatus = status
+        updateNoteDock(saved = !noteDirty, animate = false)
+        return dock
+    }
+
+    private fun buildNotesPanel() = LinearLayout(themed).apply {
+        orientation = LinearLayout.VERTICAL
+        layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, panelH)
+        addView(panelBar("Notes", "New") { openNote(null) })
+        val list = LinearLayout(themed).apply { orientation = LinearLayout.VERTICAL }
+        notesList = list
+        addView(android.widget.ScrollView(themed).apply {
+            isVerticalScrollBarEnabled = false; overScrollMode = View.OVER_SCROLL_NEVER; addView(list)
+        }, lp(MATCH_PARENT, 0, 1f))
+        fillNotes()
+    }
+
+    private fun fillNotes() {
+        val box = notesList ?: return
+        box.removeAllViews()
+        val notes = NoteStore.all(this)
+        if (notes.isEmpty()) {
+            box.addView(TextView(themed).apply {
+                text = "No notes yet\nTap New to write one"; textSize = 14f; gravity = Gravity.CENTER
+                setTextColor(tokens.keyText); alpha = 0.5f
+            }, lp(MATCH_PARENT, 120.dp))
+            return
+        }
+        val medium = ResourcesCompat.getFont(themed, R.font.gsr_medium)
+        val rad = Prefs.keyRadius(this).dp.toFloat()
+        fun shape(c: Int) = GradientDrawable().apply { setColor(c); cornerRadius = rad }
+        for (n in notes) box.addView(LinearLayout(themed).apply {
+            orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+            background = android.graphics.drawable.StateListDrawable().apply {
+                addState(intArrayOf(android.R.attr.state_pressed), shape(tokens.pressed))
+                addState(intArrayOf(), shape(tokens.key))
+            }
+            setOnClickListener { openNote(n) }
+            addView(LinearLayout(themed).apply {
+                orientation = LinearLayout.VERTICAL; setPadding(14.dp, 9.dp, 4.dp, 9.dp)
+                addView(TextView(themed).apply {
+                    text = n.title; textSize = 15f; maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END
+                    setTextColor(tokens.keyText); if (medium != null) typeface = medium
+                })
+                if (n.preview.isNotEmpty()) addView(TextView(themed).apply {
+                    text = n.preview; textSize = 13f; maxLines = 2; ellipsize = android.text.TextUtils.TruncateAt.END
+                    setTextColor(tokens.keyText); alpha = 0.7f
+                })
+                addView(TextView(themed).apply {
+                    val ago = android.text.format.DateUtils.getRelativeTimeSpanString(n.updated, System.currentTimeMillis(),
+                        android.text.format.DateUtils.MINUTE_IN_MILLIS, android.text.format.DateUtils.FORMAT_ABBREV_RELATIVE)
+                    text = "$ago \u00B7 ${n.words} words"; textSize = 11.5f; maxLines = 1
+                    setTextColor(tokens.keyText); alpha = 0.5f
+                }, lp(WRAP_CONTENT, WRAP_CONTENT).apply { topMargin = 2.dp })
+            }, lp(0, WRAP_CONTENT, 1f))
+            addView(TextView(themed).apply {
+                text = "Insert"; textSize = 13.5f; gravity = Gravity.CENTER
+                setPadding(12.dp, 0, 12.dp, 0); setTextColor(tokens.keyText)
+                background = tokens.stripItemBackground()
+                setOnClickListener {
+                    lastFix = null
+                    currentInputConnection?.commitText(n.body, 1)
+                    afterEdit()
+                    closePanel()
+                }
+            }, lp(WRAP_CONTENT, 36.dp).apply { marginStart = 4.dp })
+            // delete asks twice: the first tap turns the cross into "Delete?" for a moment
+            addView(TextView(themed).apply {
+                text = "\u2715"; textSize = 14f; gravity = Gravity.CENTER; alpha = 0.55f
+                setTextColor(tokens.keyText); contentDescription = "Delete note"
+                minWidth = 44.dp; setPadding(8.dp, 0, 8.dp, 0)
+                setOnClickListener { v ->
+                    val t = v as TextView
+                    if (t.tag == true) { NoteStore.delete(this@PillboardService, n.id); fillNotes(); return@setOnClickListener }
+                    t.tag = true; t.text = "Delete?"; t.textSize = 12.5f; t.alpha = 1f; t.setTextColor(0xFFE5484D.toInt())
+                    t.postDelayed({
+                        if (t.isAttachedToWindow) { t.tag = false; t.text = "\u2715"; t.textSize = 14f; t.alpha = 0.55f; t.setTextColor(tokens.keyText) }
+                    }, 2500L)
+                }
+            }, lp(WRAP_CONTENT, 44.dp))
+        }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { setMargins(3.dp, 0, 3.dp, 6.dp) })
     }
 
     // clipboard: Android has no history API, so copies are collected while the keyboard process lives (memory only, never written to disk)
@@ -1149,6 +1398,7 @@ class PillboardService : InputMethodService() {
 
     /** State only (no rebuild): used when the keyboard is torn down or another panel takes over the strip. */
     private fun stopTranslateState() {
+        endNote()
         translateMode = false
         trSeq++
         trAnim?.cancel(); trAnim = null
@@ -1324,7 +1574,7 @@ class PillboardService : InputMethodService() {
     }
 
     private fun requestTranslate(swapped: Boolean = false) {
-        if (!translateMode) return
+        if (!translateMode || noteMode) return
         val text = fieldText().trim()
         if (text.isEmpty()) {
             trSeq++
@@ -1662,6 +1912,7 @@ class PillboardService : InputMethodService() {
     private fun runFeature(f: StripFeature) = when (f) {
         StripFeature.TRANSLATE -> startTranslate()
         StripFeature.CLIPBOARD -> openPanel(Panel.CLIPBOARD)
+        StripFeature.NOTES -> openPanel(Panel.NOTES)
         StripFeature.TEXT_EDIT -> openPanel(Panel.EDIT)
         StripFeature.EMOJI -> setEmoji(true)
         StripFeature.REPEAT -> repeatLast()
@@ -2632,7 +2883,7 @@ class PillboardService : InputMethodService() {
         autoCap(letterTyped)
         if (prev != shift) updateShiftUi()
         updateStrip()
-        if (translateMode) { trHandler.removeCallbacks(trDebounce); trHandler.postDelayed(trDebounce, 550) }
+        if (translateMode && !noteMode) { trHandler.removeCallbacks(trDebounce); trHandler.postDelayed(trDebounce, 550) }
     }
 }
 
