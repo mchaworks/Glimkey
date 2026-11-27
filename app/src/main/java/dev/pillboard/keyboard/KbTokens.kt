@@ -136,7 +136,8 @@ class KbTokens(ctx0: Context, val theme: KbTheme = KbTheme.current(ctx0)) {
     private val hint = seed ?: c(MR.attr.colorPrimary, 0xFF6750A4.toInt())
     // three-tone: special keys wear the secondary container (a notch darker in light mode so they stay apart from the shell)
     // special keys are the SHELL a step deeper (plus a little of the secondary tone), so they share its hue instead of reading as a different grey
-    private val specialBase = tone(background, Color.BLACK, if (night) 0.22f else 0.09f)
+    // light: a touch darker than the LETTER key (same family, clean light grey), not than the shell: a shell-derived grey turned muddy over the blur
+    private val specialBase = if (night) tone(background, Color.BLACK, 0.22f) else tone(keyBase, Color.BLACK, 0.09f)
     val special = ka(p?.special ?: triad?.let { ColorUtils.blendARGB(specialBase, it.sc, 0.25f) }
         ?: ColorUtils.blendARGB(specialBase, hint, 0.06f))
     val specialText = p?.specialText ?: triad?.onSc ?: keyText
