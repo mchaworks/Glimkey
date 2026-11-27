@@ -117,6 +117,8 @@ class KbTokens(ctx0: Context, val theme: KbTheme = KbTheme.current(ctx0)) {
     /** Liquid Glass keycap opacity (Settings > Appearance > Glass & blur > Key opacity): below 100% the keys are glass too and the blur shows through them. */
     private val keyAlpha = if (isGlass) Prefs.int(ctx, "key_alpha", 100).coerceIn(30, 100) * 255 / 100 else 255
     private fun ka(c: Int) = if (keyAlpha >= 255) c else ColorUtils.setAlphaComponent(c, keyAlpha)
+    /** Special keys (shift, 123, space...) stay at least ~90% opaque: translucent they vanish into the blurred panel over a light app and turn muddy over a dark one. */
+    private fun kaSpecial(c: Int) = if (keyAlpha >= 255) c else ColorUtils.setAlphaComponent(c, maxOf(keyAlpha, 0xE6))
     private val keyBase = p?.key ?: seedTri?.takeIf { night }?.let { ColorUtils.blendARGB(0xFF3C3C42.toInt(), it.pc, 0.20f) } ?: if (night) tone(c(MR.attr.colorSurfaceContainerHighest, 0xFF36343B.toInt()), Color.WHITE, 0.10f)
               else c(MR.attr.colorSurfaceContainerLowest, Color.WHITE)
     val key = ka(keyBase)
@@ -138,7 +140,7 @@ class KbTokens(ctx0: Context, val theme: KbTheme = KbTheme.current(ctx0)) {
     // special keys are the SHELL a step deeper (plus a little of the secondary tone), so they share its hue instead of reading as a different grey
     // light: a touch darker than the LETTER key (same family, clean light grey), not than the shell: a shell-derived grey turned muddy over the blur
     private val specialBase = if (night) tone(background, Color.BLACK, 0.22f) else tone(keyBase, Color.BLACK, 0.09f)
-    val special = ka(p?.special ?: triad?.let { ColorUtils.blendARGB(specialBase, it.sc, 0.25f) }
+    val special = kaSpecial(p?.special ?: triad?.let { ColorUtils.blendARGB(specialBase, it.sc, 0.25f) }
         ?: ColorUtils.blendARGB(specialBase, hint, 0.06f))
     val specialText = p?.specialText ?: triad?.onSc ?: keyText
     /** Ink of a special key while pressed. */
@@ -236,6 +238,13 @@ object KbMode {
     private val TERMINALS = setOf("com.termux", "org.connectbot", "jackpal.androidterm", "com.server.auditor.ssh.client", "com.sonelli.juicessh")
     /** In "System" mode a terminal gets the dark keyboard even when the phone is in light mode. */
     fun forApp(pkg: String?): Boolean? = if (pkg != null && pkg in TERMINALS) true else null
+    fun appKey(pkg: String) = "app_mode_$pkg"
+    /** Terminals are dark; any other app can be set to dark / light by long-pressing the name in the strip. null = follow the system. */
+    fun forApp(c: Context, pkg: String?): Boolean? {
+        if (pkg == null) return null
+        forApp(pkg)?.let { return it }
+        return when (Prefs.str(c, appKey(pkg), "")) { "dark" -> true; "light" -> false; else -> null }
+    }
     fun night(c: Context): Boolean = when (pref(c)) { "dark" -> true; "light" -> false; else -> appNight ?: systemNight(c) }
 
     /** The keyboard's Material theme (Material You or the fixed palette) with the chosen mode applied. */

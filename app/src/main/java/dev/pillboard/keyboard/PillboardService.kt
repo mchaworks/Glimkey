@@ -260,9 +260,35 @@ class PillboardService : InputMethodService() {
 
     private var lastFieldKey = 0
 
+    /**
+     * Long-press on the name in the strip: this app's keyboard mode cycles Auto (system) -> Dark -> Light and is remembered.
+     * Needed because an app's own in-app dark mode (Instagram, Reels...) is invisible to the keyboard. Only applies while
+     * Settings > Mode is "System".
+     */
+    private fun cycleAppMode() {
+        val pkg = currentInputEditorInfo?.packageName ?: return
+        if (KbMode.pref(this) != "system") {
+            android.widget.Toast.makeText(this, "Mode is fixed in Settings (Appearance)", android.widget.Toast.LENGTH_SHORT).show()
+            return
+        }
+        val key = KbMode.appKey(pkg)
+        val next = when (Prefs.str(this, key, "")) { "" -> "dark"; "dark" -> "light"; else -> "" }
+        Prefs.setStr(this, key, next)
+        KbMode.appNight = KbMode.forApp(this, pkg)
+        android.widget.Toast.makeText(this, "This app: " + when (next) { "dark" -> "Dark keyboard"; "light" -> "Light keyboard"; else -> "Follow system" }, android.widget.Toast.LENGTH_SHORT).show()
+        host?.post {
+            stopTranslateState()
+            setInputView(onCreateInputView())
+            applyBlur()
+            render()
+            setupEdgeToEdgeWindow()
+            root?.let { ViewCompat.requestApplyInsets(it) }
+        }
+    }
+
     override fun onStartInputView(info: EditorInfo?, restarting: Boolean) {
         super.onStartInputView(info, restarting)
-        KbMode.appNight = KbMode.forApp(info?.packageName)
+        KbMode.appNight = KbMode.forApp(this, info?.packageName)
         applyPadding()      // Settings > Layout > Bottom spacing
         val rebuild = KbMode.night(this) != builtNight || Prefs.dynamic(this) != builtDynamic || Prefs.seedColor(this) != builtSeed || BackEffect.pressGlow(this) != builtFx || KbTheme.current(this) != builtTheme ||
             KbMode.pref(this) != builtMode || Prefs.bool(this, "tritone", true) != builtTri || Prefs.accentStyle(this) != builtStyle || Prefs.int(this, "blur_tint", 62) != builtTint || Prefs.int(this, "key_alpha", 100) != builtKeyAlpha || Prefs.int(this, "blur_radius", GlassDefaults.BLUR_RADIUS) != builtBlurRad
@@ -981,6 +1007,7 @@ class PillboardService : InputMethodService() {
     private fun LinearLayout.pk(w: Float, label: String, style: KeyStyle = KeyStyle.SPECIAL, repeat: Boolean = false, icon: Int = 0, onKey: () -> Unit): KeyView {
         val g = Prefs.keyGap(this@PillboardService)
         return KeyView(themed, label, style, tokens, repeat, icon, onKey).also {
+            if (translateMode) it.setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, it.textSize * 0.86f)     // shortened rows: the glyphs must fit the face
             it.setHitInset(g.dp, (g + 2).dp)
             it.glass = shell
             it.tapFx = tapFx
@@ -1068,21 +1095,29 @@ class PillboardService : InputMethodService() {
         val canAnimate = r != null && old != null && r.isLaidOut && panel == Panel.NONE && !emojiMode && animationsOn(this)
         val ghost = if (canAnimate && old != null) snapshot(old) else null
         val rect = if (ghost != null && old != null) android.graphics.Rect(old.left, old.top, old.right, old.bottom) else null
+        val oldKey = keyHeight(false)
         translateMode = true
         trSrcPick = "auto"; trTgtPick = null; trSwapTurns = 0
         trState = TrState.IDLE; trText = null; trSrc = null; trMsg = ""
-        // The window keeps its height: the dock takes the room from the key rows (see keyHeight), so nothing grows upward,
-        // the app is not resized, and the window blur stays on the whole time.
-        val extra = 0
+        // The window keeps its height: the dock takes the room from the key rows (see keyHeight), so the app is not resized
+        // and the window blur stays on the whole time. The opening is only drawn (playDockEnter).
+        val extra = (trDockH - trStripH).coerceAtLeast(0)
         render()
         requestTranslate()
-        if (ghost != null && rect != null) playDockEnter(ghost, rect, extra)
+        if (ghost != null && rect != null && r != null) {
+            r.viewTreeObserver.addOnPreDrawListener(object : android.view.ViewTreeObserver.OnPreDrawListener {
+                override fun onPreDraw(): Boolean {
+                    r.viewTreeObserver.removeOnPreDrawListener(this)      // laid out, not yet drawn: the first frame is already the animation's first frame
+                    if (translateMode) playDockEnter(ghost, rect, extra, oldKey) else ghost.recycle()
+                    return true
+                }
+            })
+        } else ghost?.recycle()
     }
 
     /**
-     * Closing: the window shrinks at once (the glass is the window, so blur and glass shrink together and the app's
-     * inset changes once). The dock has no exit animation of its own: it is simply gone, and the strip arrives in
-     * its place with Blur Replace.
+     * Closing, the opening played backwards: the dock's picture sinks and blurs away, the key rows grow back to full
+     * height and the strip arrives from blur. The window never changes size, so the blur is never touched.
      */
     private fun stopTranslate() {
         if (!translateMode) return
@@ -1090,24 +1125,24 @@ class PillboardService : InputMethodService() {
         val dock = trDock
         var bmp: android.graphics.Bitmap? = null
         var rect: android.graphics.Rect? = null
-        var extra = 0
+        val trKey = keyHeight()
         val animate = r != null && dock != null && dock.isLaidOut && dock.height > 0 && animationsOn(this)
         if (animate && dock != null) {
             bmp = snapshot(dock)
             rect = android.graphics.Rect(dock.left, dock.top, dock.right, dock.bottom)
         }
         stopTranslateState()
-        val morph = bmp != null && rect != null && extra > 0
-        if (morph) {
-            // the window keeps its tall size until the shell has sunk back onto the strip (a spacer, see playDockExit); the
-            // window blur covers the whole window, so it is off meanwhile. The app is let down to the strip's edge at once.
-            fadeBlur(0f, fillK, 0L)
-            fadeBlur(0f, 1f, 100L)
-            setInsetHold(extra)
-        }
         render()
-        if (morph && bmp != null && rect != null) playDockExit(bmp, rect, extra)
-        else { bmp?.recycle(); if (animate) playStripEnter() }
+        if (animate && r != null && bmp != null && rect != null) {
+            val b = bmp; val rc = rect
+            r.viewTreeObserver.addOnPreDrawListener(object : android.view.ViewTreeObserver.OnPreDrawListener {
+                override fun onPreDraw(): Boolean {
+                    r.viewTreeObserver.removeOnPreDrawListener(this)
+                    if (!translateMode) playDockExit(b, rc, trKey) else b.recycle()
+                    return true
+                }
+            })
+        } else { bmp?.recycle(); if (animate) playStripEnter() }
     }
 
     /** State only (no rebuild): used when the keyboard is torn down or another panel takes over the strip. */
@@ -1137,24 +1172,54 @@ class PillboardService : InputMethodService() {
     }
 
     /**
-     * Opening: the window and the dock take their full size at once (ONE resize: animating the window's height every
-     * frame made the window manager apply sizes a frame late and the keyboard glitch). The growth is drawn instead: the
-     * shell's top edge ([setShellTop]: glass and clip) rises from [extra] px down to 0 on [trSpring] while the dock's
-     * content slides up with it; the strip's picture blurs away and the dock's parts arrive from blur. Nothing here
-     * changes layout. The window blur is off meanwhile (see [fadeBlur]) and eases back once the shell has arrived.
+     * The key rows drawn as if they were still laid out with keys [fromKey] px tall, while the real layout already has
+     * [toKey]: [set] 0 = the old look, 1 = the real one. Only transforms (translation + scaleY from the row's top), no
+     * relayout per frame. [oldFirstTop] is where the first row used to start (in the parent's coordinates).
      */
-    private fun playDockEnter(bmp: android.graphics.Bitmap, rect: android.graphics.Rect, extra: Int) {
+    private class RowMorph(private val views: List<View>, private val ty0: FloatArray, private val sy0: FloatArray) {
+        fun set(p: Float) {
+            val k = 1f - p
+            for (i in views.indices) { views[i].translationY = ty0[i] * k; views[i].scaleY = 1f + (sy0[i] - 1f) * k }
+        }
+        fun clear() { views.forEach { it.translationY = 0f; it.scaleY = 1f } }
+    }
+
+    private fun rowMorph(r: ViewGroup, anchor: View, oldFirstTop: Int, fromKey: Int, toKey: Int): RowMorph? {
+        val m = (2 * (Prefs.keyGap(this) + 2)).dp
+        val ratio = (fromKey + m).toFloat() / (toKey + m).coerceAtLeast(1)
+        val views = ArrayList<View>(); val ty = ArrayList<Float>(); val sy = ArrayList<Float>()
+        var top = oldFirstTop.toFloat()
+        for (i in r.indexOfChild(anchor) + 1 until r.childCount) {
+            val v = r.getChildAt(i)
+            if (v.visibility != View.VISIBLE || v.height <= 0) continue
+            v.pivotY = 0f
+            views.add(v); ty.add(top - v.top); sy.add(ratio)
+            top += v.height * ratio
+        }
+        return if (views.isEmpty()) null else RowMorph(views, ty.toFloatArray(), sy.toFloatArray())
+    }
+
+    /**
+     * Opening: the window and the dock already have their final size (ONE layout, the window never resizes). What is
+     * drawn: the dock's content rises into its box from below ([extra] px, on [trSpring]) while the strip's picture sinks
+     * and blurs away, the key rows squeeze down from their full height to the shortened one, and the dock's parts arrive
+     * from blur one after another. Nothing here changes layout and the window blur is never touched.
+     */
+    private fun playDockEnter(bmp: android.graphics.Bitmap, rect: android.graphics.Rect, extra: Int, oldKey: Int) {
         val r = root
         val dock = trDock
-        if (r == null || dock == null) { bmp.recycle(); setShellTop(0); setInsetHold(0); fadeBlur(1f, 0f, 0L); return }
+        if (r == null || dock == null) { bmp.recycle(); return }
         val parts = trParts
         val content = trContent
+        val morph = rowMorph(r, dock, dock.top + trStripH + 3.dp, oldKey, keyHeight())
         val ghost = ghostOf(bmp, rect)
         val delays = parts.mapIndexed { i, _ -> if (i == parts.lastIndex) trCardStart else trPartStart + i * trPartStep }
         val spring = trSpring
         val total = maxOf(spring.settleMs, BlurTextTokens.OUT_MS, (delays.maxOrNull() ?: 0L) + BlurTextTokens.IN_MS)
         parts.forEach { it.blurFx(1f, BlurDir.UP, 1) }
-        ghost.layout(rect.left, rect.top + extra, rect.right, rect.bottom + extra)
+        content?.translationY = extra.toFloat()
+        morph?.set(0f)
+        ghost.layout(rect.left, rect.top, rect.right, rect.bottom)
         r.overlay.add(ghost)
         trAnim = android.animation.ValueAnimator.ofFloat(0f, 1f).apply {
             duration = total
@@ -1163,12 +1228,10 @@ class PillboardService : InputMethodService() {
                 val t = it.animatedFraction * total
                 val p = spring.getInterpolation((t / spring.settleMs).coerceIn(0f, 1f))
                 val g = (extra * (1f - p)).toInt().coerceAtLeast(0)
-                if (g != shellTop) {
-                    setShellTop(g)
-                    content?.translationY = g.toFloat()
-                    ghost.layout(rect.left, rect.top + g, rect.right, rect.bottom + g)
-                }
-                ghost.blurFx(BlurTextTokens.outEase.getInterpolation((t / BlurTextTokens.OUT_MS).coerceIn(0f, 1f)), BlurDir.UP, -1)
+                content?.translationY = g.toFloat()
+                morph?.set(p)
+                ghost.layout(rect.left, rect.top + (extra - g), rect.right, rect.bottom + (extra - g))
+                ghost.blurFx(BlurTextTokens.outEase.getInterpolation((t / BlurTextTokens.OUT_MS).coerceIn(0f, 1f)), BlurDir.DOWN, -1)
                 parts.forEachIndexed { i, v ->
                     val x = ((t - delays[i]) / BlurTextTokens.IN_MS).coerceIn(0f, 1f)
                     v.blurFx(1f - BlurTextTokens.inEase.getInterpolation(x), BlurDir.UP, 1)
@@ -1178,10 +1241,8 @@ class PillboardService : InputMethodService() {
                 override fun onAnimationEnd(a: android.animation.Animator) {
                     r.overlay.remove(ghost); bmp.recycle()
                     parts.forEach { it.blurFx(0f, BlurDir.UP, 1) }
-                    setShellTop(0)
                     content?.translationY = 0f
-                    setInsetHold(0)
-                    fadeBlur(1f, 0f, 240L)      // window = glass again: the blur may come back, the firm fill gives way to it
+                    morph?.clear()
                     if (trAnim === a) trAnim = null
                 }
             })
@@ -1190,19 +1251,18 @@ class PillboardService : InputMethodService() {
     }
 
     /**
-     * Closing, the opening played backwards: the dock's picture blurs away downward while the strip arrives from blur,
-     * and the shell's top edge sinks back onto the strip (drawn, not laid out). A spacer (the dock's extra height) keeps
-     * the window at its tall size for the whole animation; it goes at the end, so the window shrinks ONCE, exactly
-     * where the edge already is (no pop). The window blur eases back afterwards, like after opening.
+     * Closing, the opening played backwards: the dock's picture sinks and blurs away, the key rows grow from the
+     * shortened height back to full, and the strip arrives from blur. Drawn only, the window keeps its size.
      */
-    private fun playDockExit(bmp: android.graphics.Bitmap, rect: android.graphics.Rect, extra: Int) {
+    private fun playDockExit(bmp: android.graphics.Bitmap, rect: android.graphics.Rect, trKey: Int) {
         val r = root
-        if (r == null) { bmp.recycle(); setInsetHold(0); fadeBlur(1f, 0f, 0L); return }
         val s = strip
+        if (r == null || s == null) { bmp.recycle(); return }
+        val extra = (trDockH - trStripH).coerceAtLeast(0)
+        val morph = rowMorph(r, s, s.top + trDockH + 3.dp, trKey, keyHeight())
         val ghost = ghostOf(bmp, rect)
-        val spacer = View(themed)
-        r.addView(spacer, 0, LinearLayout.LayoutParams(MATCH_PARENT, extra))
-        s?.blurFx(1f, BlurDir.DOWN, 1)
+        s.blurFx(1f, BlurDir.DOWN, 1)
+        morph?.set(0f)
         r.overlay.add(ghost)
         val spring = trSpring
         val total = maxOf(spring.settleMs, BlurTextTokens.TOTAL_MS)
@@ -1212,24 +1272,18 @@ class PillboardService : InputMethodService() {
             addUpdateListener {
                 val t = it.animatedFraction * total
                 val p = spring.getInterpolation((t / spring.settleMs).coerceIn(0f, 1f))
+                morph?.set(p)
                 val g = (extra * p).toInt().coerceIn(0, extra)
-                if (g != shellTop) {
-                    setShellTop(g)
-                    ghost.layout(rect.left, rect.top + g, rect.right, rect.bottom + g)
-                    ghost.clipBounds = android.graphics.Rect(0, 0, rect.width(), (rect.height() - g).coerceAtLeast(0))
-                }
+                ghost.layout(rect.left, rect.top + g, rect.right, rect.bottom + g)
                 ghost.blurFx(BlurTextTokens.outEase.getInterpolation((t / BlurTextTokens.OUT_MS).coerceIn(0f, 1f)), BlurDir.DOWN, -1)
                 val x = ((t - BlurTextTokens.IN_DELAY_MS) / BlurTextTokens.IN_MS).coerceIn(0f, 1f)
-                s?.blurFx(1f - BlurTextTokens.inEase.getInterpolation(x), BlurDir.DOWN, 1)
+                s.blurFx(1f - BlurTextTokens.inEase.getInterpolation(x), BlurDir.DOWN, 1)
             }
             addListener(object : android.animation.AnimatorListenerAdapter() {     // also runs when cancelled
                 override fun onAnimationEnd(a: android.animation.Animator) {
                     r.overlay.remove(ghost); bmp.recycle()
-                    (spacer.parent as? ViewGroup)?.removeView(spacer)
-                    s?.blurFx(0f, BlurDir.DOWN, 1)
-                    setShellTop(0)
-                    setInsetHold(0)
-                    fadeBlur(1f, 0f, 240L)
+                    s.blurFx(0f, BlurDir.DOWN, 1)
+                    morph?.clear()
                     if (trAnim === a) trAnim = null
                 }
             })
@@ -2060,7 +2114,7 @@ class PillboardService : InputMethodService() {
      * User key height, clamped so 4–5 rows + suggestions never take more than ~55% of the screen
      * (landscape, split-screen, short displays).
      */
-    private fun keyHeight(): Int {
+    private fun keyHeight(tr: Boolean = translateMode): Int {
         val land = resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
         val pref = (if (land) Prefs.int(this, "key_h_land", 42) else Prefs.int(this, "key_h", 50)).dp
         val rows = 4f + (if (Prefs.bool(this, "numrow", false) && !symbols) 0.8f else 0f)
@@ -2069,7 +2123,7 @@ class PillboardService : InputMethodService() {
         val margins = (2 * Prefs.keyGap(this) + 4).dp
         val fit = (budget / rows).toInt() - margins
         val normal = minOf(pref, fit).coerceAtLeast(34.dp)
-        if (!translateMode) return normal
+        if (!tr) return normal
         // translate dock: the window stays exactly as tall as with the strip, the rows give up what the dock needs on top of the strip
         val save = (trDockH - trStripH).coerceAtLeast(0) / rows
         return (normal - save).toInt().coerceAtLeast(26.dp)
@@ -2091,6 +2145,7 @@ class PillboardService : InputMethodService() {
         // rows breathe more than columns, like iOS 26
         val lp = LinearLayout.LayoutParams(0, h + 2 * (g + 2).dp, w)
         return KeyView(themed, label, style, tokens, repeat, icon, onKey).also {
+            if (translateMode) it.setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, it.textSize * 0.86f)     // shortened rows: the glyphs must fit the face
             it.setHitInset(g.dp, (g + 2).dp)
             if (Prefs.bool(this@PillboardService, "keypreview", true)) it.preview = preview
             it.glass = shell
@@ -2236,6 +2291,8 @@ class PillboardService : InputMethodService() {
                 setPadding(12.dp, 0, 8.dp, 0)
                 addView(inner, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT))
             }
+            // an IME cannot see whether the app is in its own dark mode: long-press the name to pick Auto / Dark / Light for THIS app
+            b.setOnLongClickListener { cycleAppMode(); true }
             brandInner = inner; brandChip = b
             addView(b, LinearLayout.LayoutParams(0, MATCH_PARENT, 1f).apply { setMargins(2.dp, 1.dp, 2.dp, 1.dp) })
         }
