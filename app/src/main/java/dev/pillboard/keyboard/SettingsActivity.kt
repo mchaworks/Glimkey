@@ -41,7 +41,7 @@ class SettingsActivity : Activity() {
         APPEARANCE("Appearance", "Theme, colors, glass, keys, effects", R.drawable.ic_set_look, 0xFFBF5AF2.toInt()),
         LOOK_THEME("Theme & mode", "Keyboard theme, light / dark", R.drawable.ic_set_look, 0xFFBF5AF2.toInt(), parent = APPEARANCE),
         LOOK_COLOR("Colors", "Accent color, three-tone accent", R.drawable.ic_set_look, 0xFFFF375F.toInt(), parent = APPEARANCE),
-        LOOK_GLASS("Glass & blur", "Backdrop blur, tint, refraction, lens", R.drawable.ic_set_look, 0xFF32ADE6.toInt(), parent = APPEARANCE),
+        LOOK_GLASS("Glass & blur", "Backdrop blur, tint, key opacity, refraction, lens", R.drawable.ic_set_look, 0xFF32ADE6.toInt(), parent = APPEARANCE),
         LOOK_KEYS("Keys", "Height, shape, spacing, key preview", R.drawable.ic_set_layout, 0xFFFF9F0A.toInt(), parent = APPEARANCE),
         LOOK_FX("Effects", "Tap effect, back effect, effect color", R.drawable.ic_set_feedback, 0xFF30B650.toInt(), parent = APPEARANCE),
         LAYOUT("Layout", "Layout style, number row, emoji key, bottom spacing", R.drawable.ic_set_layout, 0xFFFF9F0A.toInt()),
@@ -194,6 +194,9 @@ class SettingsActivity : Activity() {
             },
             Item(Page.LOOK_GLASS, "Blur tint", "blur tint opacity transparency glass shell frosted clear see through", visible = { KbTheme.current(this).isGlass }) {
                 ui.slider("Blur tint", 10, 100, "blur_tint", 62, listOf("Clear" to 30, "Standard" to 62, "Frosted" to 85), unit = "%") { refreshPreview() }
+            },
+            Item(Page.LOOK_GLASS, "Key opacity", "glass keys keycap transparent translucent see through blur clear frosted solid", visible = { KbTheme.current(this).isGlass }) {
+                ui.slider("Key opacity", 30, 100, "key_alpha", 100, listOf("Clear" to 45, "Frosted" to 70, "Solid" to 100), unit = "%") { refreshPreview() }
             },
             Item(Page.LOOK_GLASS, "Blur status", "blur glass system available blocked", visible = { KbTheme.current(this).isGlass }) {
                 ui.info("Blur status", blurStatus()).also { blurStatusValue = it.findViewWithTag<BlurTextView>("value") }
@@ -688,7 +691,7 @@ class SettingsActivity : Activity() {
                 "haptic_slide", "sound", "sound_style", "sound_vol"),
             Page.LOOK_THEME to listOf(KbTheme.PREF, "mode"),
             Page.LOOK_COLOR to listOf("preset", "accent_v2", "dynamic", "hue", "accent_style", "tritone"),
-            Page.LOOK_GLASS to listOf("blur", "blur_tint", "refract", "lens"),
+            Page.LOOK_GLASS to listOf("blur", "blur_tint", "key_alpha", "refract", "lens"),
             Page.LOOK_KEYS to listOf("keypreview", "key_h", "key_h_land") + KbTheme.values().flatMap { listOf(it.keyRKey, it.keyGapKey) },
             Page.LOOK_FX to listOf(TapEffect.PREF, TapEffect.COLOR_PREF, BackEffect.PREF),
         )

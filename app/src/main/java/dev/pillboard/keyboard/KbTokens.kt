@@ -113,8 +113,12 @@ class KbTokens(ctx0: Context, val theme: KbTheme = KbTheme.current(ctx0)) {
     val glassFillNoBlur = p?.bg ?: ColorUtils.setAlphaComponent(background, 0xF2)
     val glassStroke = p?.shellLine ?: ColorUtils.setAlphaComponent(c(MR.attr.colorOutlineVariant, if (night) Color.WHITE else Color.BLACK), if (night) 0x48 else 0x30)
     val glassHighlight = p?.let { ColorUtils.setAlphaComponent(it.keyText, 0x40) } ?: ColorUtils.setAlphaComponent(Color.WHITE, if (night) 0x24 else 0x66)
-    val key = p?.key ?: seedTri?.takeIf { night }?.let { ColorUtils.blendARGB(0xFF3C3C42.toInt(), it.pc, 0.20f) } ?: if (night) tone(c(MR.attr.colorSurfaceContainerHighest, 0xFF36343B.toInt()), Color.WHITE, 0.10f)
+    /** Liquid Glass keycap opacity (Settings > Appearance > Glass & blur > Key opacity): below 100% the keys are glass too and the blur shows through them. */
+    private val keyAlpha = if (isGlass) Prefs.int(ctx, "key_alpha", 100).coerceIn(30, 100) * 255 / 100 else 255
+    private fun ka(c: Int) = if (keyAlpha >= 255) c else ColorUtils.setAlphaComponent(c, keyAlpha)
+    private val keyBase = p?.key ?: seedTri?.takeIf { night }?.let { ColorUtils.blendARGB(0xFF3C3C42.toInt(), it.pc, 0.20f) } ?: if (night) tone(c(MR.attr.colorSurfaceContainerHighest, 0xFF36343B.toInt()), Color.WHITE, 0.10f)
               else c(MR.attr.colorSurfaceContainerLowest, Color.WHITE)
+    val key = ka(keyBase)
     val keyText = p?.keyText ?: c(MR.attr.colorOnSurface, if (night) Color.WHITE else Color.BLACK)
     // the user's accent / Material You only drive Liquid Glass; every other theme has its own accent
     private val seed: Int? = if (!isGlass || Prefs.dynamic(ctx)) null else Prefs.seedColor(ctx)
@@ -132,8 +136,8 @@ class KbTokens(ctx0: Context, val theme: KbTheme = KbTheme.current(ctx0)) {
     // three-tone: special keys wear the secondary container (a notch darker in light mode so they stay apart from the shell)
     // special keys are the SHELL a step deeper (plus a little of the secondary tone), so they share its hue instead of reading as a different grey
     private val specialBase = tone(background, Color.BLACK, if (night) 0.22f else 0.09f)
-    val special = p?.special ?: triad?.let { ColorUtils.blendARGB(specialBase, it.sc, 0.25f) }
-        ?: ColorUtils.blendARGB(specialBase, hint, 0.06f)
+    val special = ka(p?.special ?: triad?.let { ColorUtils.blendARGB(specialBase, it.sc, 0.25f) }
+        ?: ColorUtils.blendARGB(specialBase, hint, 0.06f))
     val specialText = p?.specialText ?: triad?.onSc ?: keyText
     /** Ink of a special key while pressed. */
     val pressedSpecialText = p?.pressedText ?: triad?.onSc ?: keyText
@@ -148,7 +152,7 @@ class KbTokens(ctx0: Context, val theme: KbTheme = KbTheme.current(ctx0)) {
     val accentPressed = tone(accent, Color.BLACK, 0.18f)
     /** An active Shift / Caps / Select key: tertiary in the three-tone accent, the inverted letter tone otherwise. */
     val activeFill = triad?.t ?: keyText
-    val activeInk = triad?.onT ?: key
+    val activeInk = triad?.onT ?: (keyBase or 0xFF000000.toInt())
 
     // suggestion strip: a faint tonal wash of the text color over the glass, so it belongs to the shell
     val stripFill = p?.stripFill ?: Color.TRANSPARENT          // iOS 26: no capsule, just words and dividers

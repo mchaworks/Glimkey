@@ -95,6 +95,7 @@ class PillboardService : InputMethodService() {
     private var builtTri = true
     private var builtStyle = AccentStyle.TONAL
     private var builtTint = 62
+    private var builtKeyAlpha = 100
     private var pageKey: KeyView? = null
     // emoji panel: grid mode (tabs + grid) or search mode (letter keys type into [query], results in the top bar)
     private var emojiMode = false
@@ -165,6 +166,7 @@ class PillboardService : InputMethodService() {
         builtTri = Prefs.bool(this, "tritone", true)
         builtStyle = Prefs.accentStyle(this)
         builtTint = Prefs.int(this, "blur_tint", 62)
+        builtKeyAlpha = Prefs.int(this, "key_alpha", 100)
         shell = null
         lastBlurRadius = -1; maskDrawable = null; maskGlass = null; maskHost = null     // a new input view: everything is applied afresh
         blurAnim?.cancel(); blurK = 1f; fillK = 0f
@@ -261,7 +263,7 @@ class PillboardService : InputMethodService() {
         KbMode.appNight = KbMode.forApp(info?.packageName)
         applyPadding()      // Settings > Layout > Bottom spacing
         val rebuild = KbMode.night(this) != builtNight || Prefs.dynamic(this) != builtDynamic || Prefs.seedColor(this) != builtSeed || BackEffect.pressGlow(this) != builtFx || KbTheme.current(this) != builtTheme ||
-            KbMode.pref(this) != builtMode || Prefs.bool(this, "tritone", true) != builtTri || Prefs.accentStyle(this) != builtStyle || Prefs.int(this, "blur_tint", 62) != builtTint
+            KbMode.pref(this) != builtMode || Prefs.bool(this, "tritone", true) != builtTri || Prefs.accentStyle(this) != builtStyle || Prefs.int(this, "blur_tint", 62) != builtTint || Prefs.int(this, "key_alpha", 100) != builtKeyAlpha
         // The app restarted input on the SAME field (many apps do when the field is cleared or the send button changes):
         // nothing about the field changed, so keep the keyboard as it is. Rebuilding every key and re-applying the window
         // blur here made the keyboard flash and resize the app (the chat jumping up and down) each time.
