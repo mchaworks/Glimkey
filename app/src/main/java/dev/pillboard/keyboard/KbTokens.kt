@@ -140,8 +140,34 @@ class KbTokens(ctx0: Context, val theme: KbTheme = KbTheme.current(ctx0)) {
     // special keys are the SHELL a step deeper (plus a little of the secondary tone), so they share its hue instead of reading as a different grey
     // light: a touch darker than the LETTER key (same family, clean light grey), not than the shell: a shell-derived grey turned muddy over the blur
     private val specialBase = if (night) tone(background, Color.BLACK, 0.22f) else tone(keyBase, Color.BLACK, 0.09f)
-    val special = kaSpecial(p?.special ?: triad?.let { ColorUtils.blendARGB(specialBase, it.sc, 0.25f) }
-        ?: ColorUtils.blendARGB(specialBase, hint, 0.06f))
+    /**
+     * The shell as it reads over the worst-case app (white in light, black in night): the glass tint composited on that
+     * backdrop when blur is on, the solid shell colour otherwise. An IME window cannot sample the app behind it, so
+     * this estimate is what special keys are kept apart from.
+     */
+    private val shellSeen: Int = run {
+        val blurOn = Prefs.bool(ctx, "blur", false)
+        val behind = if (night) Color.BLACK else Color.WHITE
+        if (blurOn) ColorUtils.compositeColors(glassFillBlur, behind) else background or 0xFF000000.toInt()
+    }
+    /** Nudges [base] toward black (light) or white (night) until it holds [want]:1 against [shell]; flat, no outline. */
+    private fun separated(base: Int, shell: Int): Int {
+        if (!Prefs.bool(ctx, "special_contrast", true)) return base
+        val opaque = base or 0xFF000000.toInt()
+        val s = shell or 0xFF000000.toInt()
+        val toward = if (night) Color.WHITE else Color.BLACK
+        val want = if (night) 1.25 else 1.35
+        var out = opaque
+        var r = 0f
+        while (r < 0.5f && ColorUtils.calculateContrast(out, s) < want) {
+            r += 0.02f
+            out = ColorUtils.blendARGB(opaque, toward, r)
+        }
+        return ColorUtils.setAlphaComponent(out, Color.alpha(base))
+    }
+    val special = kaSpecial(p?.special ?: separated(
+        triad?.let { ColorUtils.blendARGB(specialBase, it.sc, 0.25f) } ?: ColorUtils.blendARGB(specialBase, hint, 0.06f),
+        shellSeen))
     val specialText = p?.specialText ?: triad?.onSc ?: keyText
     /** Ink of a special key while pressed. */
     val pressedSpecialText = p?.pressedText ?: triad?.onSc ?: keyText
