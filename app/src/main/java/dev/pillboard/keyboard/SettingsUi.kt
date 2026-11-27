@@ -85,7 +85,7 @@ class SettingsUi(private val a: Activity) {
     }
 
     /** Tint of the real glass (Liquid-Glass-Android) floating controls: the card colour at ~55-60% strength. */
-    val glassVeil get() = ColorUtils.setAlphaComponent(surface, if (night) 0x8C else 0x99)
+    val glassVeil get() = ColorUtils.setAlphaComponent(surface, if (night) 0x8C else 0xE8)
 
     /** Floating "Liquid Glass" surface: the card colour, mostly opaque, with a hairline edge. Give the view an elevation for the lift. */
     fun glassBg(radius: Float) = GradientDrawable().apply {

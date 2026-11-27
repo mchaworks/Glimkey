@@ -61,7 +61,10 @@ class KbTokens(ctx0: Context, val theme: KbTheme = KbTheme.current(ctx0)) {
 
     // ---- elevation ----
     // the other skins draw their own depth (hard shadow, skirt), so no system shadow under their keys
-    val keyElevation = (if (isGlass) 1f else 0f) * ctx.resources.displayMetrics.density
+    // Liquid Glass keys used to cast a 1dp system shadow too, but the shadow follows the view's outline (the whole cell, gaps
+    // included) while the keycap is drawn smaller and morphs, so on light keys it showed as grey ghost rectangles behind
+    // every key. Depth now comes from the key/shell tone contrast only.
+    val keyElevation = 0f
     val popupElevation = when (skin) {
         KeySkin.FLAT -> 6.dp.toFloat()
         KeySkin.PAPER -> 2.dp.toFloat()

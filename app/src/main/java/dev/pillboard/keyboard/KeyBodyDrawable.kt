@@ -329,7 +329,7 @@ internal class KeyBodyDrawable : Drawable() {
     override fun getOutline(outline: Outline) {
         val r = (radii[0] + radii[2] + radii[4] + radii[6]) / 4f
         outline.setRoundRect(bounds, r.coerceAtLeast(0f))
-        outline.alpha = 1f
+        outline.alpha = 0f      // never cast a system shadow: the drawn face is smaller than the cell (light mode showed it as a grey ghost)
     }
 
     override fun setAlpha(alpha: Int) { alphaMul = alpha; invalidateSelf() }

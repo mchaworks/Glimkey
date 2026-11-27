@@ -39,7 +39,7 @@ class SettingsActivity : Activity() {
         TYPING("Typing", "Suggestions, learning, auto-correction, capitalization", R.drawable.ic_set_typing, 0xFF0A84FF.toInt()),
         TRANSLATE("Translation", "Online translate, target language", R.drawable.ic_translate, 0xFF32ADE6.toInt()),
         APPEARANCE("Appearance", "Colors, shape, spacing, height", R.drawable.ic_set_look, 0xFFBF5AF2.toInt()),
-        LAYOUT("Layout", "Number row, emoji key", R.drawable.ic_set_layout, 0xFFFF9F0A.toInt()),
+        LAYOUT("Layout", "Layout style, number row, emoji key, strip button", R.drawable.ic_set_layout, 0xFFFF9F0A.toInt()),
         FEEDBACK("Feedback", "Haptics", R.drawable.ic_set_feedback, 0xFF30B650.toInt()),
         ADVANCED("Advanced", "Learned words, reset, emoji history", R.drawable.ic_set_more, 0xFF8E8E93.toInt()),
         ABOUT("About", "Version, license, credits", R.drawable.ic_set_info, 0xFF5AB8E8.toInt()),
@@ -132,13 +132,17 @@ class SettingsActivity : Activity() {
             Item(Page.LAYOUT, "Smart keys", "field numpad number phone email url web at slash dot com adapt") {
                 ui.toggle("Smart keys", "Numpad in number fields, @ in e-mail fields, / and .com in web fields", "fieldaware", true)
             },
-            Item(Page.LAYOUT, "Number row", "digits numbers top") { ui.toggle("Number row", "Show 1–0 above the letters", "numrow", false) },
+            Item(Page.LAYOUT, "Number row", "digits numbers top") { ui.toggle("Number row", "Show 1–0 above the letters", "numrow", false) { refreshPreview() } },
             Item(Page.LAYOUT, "Key hints", "hint symbol long press hold gboard number punctuation top right") {
                 ui.toggle("Key hints", "A small symbol on each letter key; hold the key to type it. Letters then type on release, and hold no longer shows accents like é", "keyhint", false) { refreshPreview() }
             },
-            Item(Page.LAYOUT, "Emoji key", "emoji smiley picker button") { ui.toggle("Emoji key", "Show the emoji button", "emoji", true) },
+            Item(Page.LAYOUT, "Strip button", "word bar capsule button feature translate clipboard text editing emoji settings swipe hold shortcut") {
+                val feats = StripFeature.available(this)
+                ui.cycle("Strip button", "strip_feature", StripFeature.current(this).id, feats.map { it.id to it.label }) { refreshPreview() }
+            },
+            Item(Page.LAYOUT, "Emoji key", "emoji smiley picker button") { ui.toggle("Emoji key", "Show the emoji button", "emoji", true) { refreshPreview(); renderBody() } },
             Item(Page.LAYOUT, "Emoji key position", "emoji smiley button comma capsule widget place", visible = { Prefs.bool(this, "emoji", true) && !Prefs.gboard(this) }) {
-                ui.cycle("Emoji key position", "emoji_pos", "capsule", listOf("capsule" to "On the strip button (swipe or hold)", "comma" to "Next to the comma key")) { refreshPreview() }
+                ui.cycle("Emoji key position", "emoji_pos", "capsule", listOf("capsule" to "On the strip button (swipe or hold)", "comma" to "Next to the comma key")) { refreshPreview(); renderBody() }
             },
             Item(Page.ADVANCED, "Clear recent emoji", "emoji recent history forget") { ui.link("Clear recent emoji", "Forget the emoji you used lately", chevron = false) { EmojiData.clearRecents(this) } },
             Item(Page.APPEARANCE, "Theme", "theme style paper terminal mechanical liquid glass skin look") {
@@ -494,9 +498,9 @@ class SettingsActivity : Activity() {
         if (page == Page.HOME) { searchBar.visibility = View.VISIBLE; searchBar.animate().alpha(1f).setDuration(220).start(); (searchBar as? GlassBar)?.pulse(700) }
         else searchBar.animate().alpha(0f).setDuration(140).withEndAction { if (page != Page.HOME) searchBar.visibility = View.GONE }.start()
         navTitle.setTextBlur(page.label, dir = pageDir)
-        // the keyboard preview lives only on Appearance, pinned under the nav bar so every change is visible while adjusting it
+        // the keyboard preview lives on Appearance and Layout (the pages whose options change it), pinned under the nav bar so every change is visible while adjusting it
         pinned.removeAllViews()
-        if (page == Page.APPEARANCE) {
+        if (page == Page.APPEARANCE || page == Page.LAYOUT) {
             previewHolder = LinearLayout(this).also { pinned.addView(it, FrameLayout.LayoutParams(-1, -2)) }
             pinned.visibility = View.VISIBLE
             buildPreview()
