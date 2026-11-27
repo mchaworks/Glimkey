@@ -85,11 +85,11 @@ class KeyPreview(ctx: Context, private val t: KbTokens) {
     private val frostOn = android.os.Build.VERSION.SDK_INT >= 31 && t.isGlass && Prefs.bool(ctx, "preview_blur", true)
     private val solidBg: Drawable = bubble.background
     private val frost: FrostDrawable? = if (frostOn)
-        FrostDrawable(GlassSurfaceDrawable(t, t.popupRadius, ColorUtils.setAlphaComponent(t.key, 0xA6), GlassSurfaceDrawable.Style.FLOATING, useShader = false), t.popupRadius)
+        FrostDrawable(GlassSurfaceDrawable(t, t.popupRadius, ColorUtils.setAlphaComponent(t.key, 0x6E), GlassSurfaceDrawable.Style.FLOATING, useShader = false), t.popupRadius)
         else null
 
     /**
-     * Draws the keyboard window's patch under the bubble (screen rect [left], [top], [w] x [h]) into an eighth-size bitmap
+     * Draws the keyboard window's patch under the bubble (screen rect [left], [top], [w] x [h]) into a quarter-size bitmap
      * (only the views that intersect the patch are drawn), blurs it and hands it to [frost]. Any failure leaves the plain bubble.
      */
     private fun captureFrost(key: View, left: Int, top: Int, w: Int, h: Int): Boolean {
@@ -97,8 +97,8 @@ class KeyPreview(ctx: Context, private val t: KbTokens) {
         return try {
             val root = key.rootView
             val rl = IntArray(2); root.getLocationOnScreen(rl)
-            val bw = (w / 8).coerceAtLeast(6)
-            val bh = (h / 8).coerceAtLeast(6)
+            val bw = (w / 4).coerceAtLeast(8)
+            val bh = (h / 4).coerceAtLeast(8)
             val bmp = android.graphics.Bitmap.createBitmap(bw, bh, android.graphics.Bitmap.Config.ARGB_8888)
             bmp.eraseColor(t.background or 0xFF000000.toInt())          // where the patch sticks out of the window: the shell tone, never black
             val c = Canvas(bmp)
