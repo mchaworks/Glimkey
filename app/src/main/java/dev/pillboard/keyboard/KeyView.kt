@@ -79,55 +79,65 @@ class KeyPreview(ctx: Context, private val t: KbTokens) {
         background = t.popupBackground()
         elevation = t.popupElevation
     }
-    // ---- frosted preview: a small, downscaled capture of the keyboard under the bubble, blurred on the GPU, with the key tone over it ----
+    // ---- frosted preview: a tiny capture of the keyboard under the bubble, softened on the CPU (a few hundred pixels),
+    // drawn stretched and clipped to the bubble, with the key tone over it. No RenderEffect and no extra view, so nothing
+    // can render half-way while the bubble springs up from the key. ----
     private val frostOn = android.os.Build.VERSION.SDK_INT >= 31 && t.isGlass && Prefs.bool(ctx, "preview_blur", true)
     private val solidBg: Drawable = bubble.background
-    private val frostBg: Drawable? = if (frostOn) GlassSurfaceDrawable(t, t.popupRadius, ColorUtils.setAlphaComponent(t.key, 0xA6), GlassSurfaceDrawable.Style.FLOATING, useShader = false) else null
-    private val frostView: android.widget.ImageView? = if (frostOn) makeFrost(ctx) else null
-    private var frostBmp: android.graphics.Bitmap? = null
-
-    @androidx.annotation.RequiresApi(31)
-    private fun makeFrost(c: Context) = android.widget.ImageView(c).apply {
-        scaleType = android.widget.ImageView.ScaleType.FIT_XY
-        clipToOutline = true
-        outlineProvider = object : android.view.ViewOutlineProvider() {
-            override fun getOutline(v: View, o: android.graphics.Outline) { o.setRoundRect(0, 0, v.width, v.height, t.popupRadius) }
-        }
-        val r = 5.dp.toFloat()
-        setRenderEffect(android.graphics.RenderEffect.createBlurEffect(r, r, android.graphics.Shader.TileMode.CLAMP))
-        visibility = View.GONE
-    }
+    private val frost: FrostDrawable? = if (frostOn)
+        FrostDrawable(GlassSurfaceDrawable(t, t.popupRadius, ColorUtils.setAlphaComponent(t.key, 0xA6), GlassSurfaceDrawable.Style.FLOATING, useShader = false), t.popupRadius)
+        else null
 
     /**
-     * Draws the keyboard window's patch under the bubble (screen rect [left], [top], [w] x [h]) into a quarter-size bitmap:
-     * only the views that intersect the patch are drawn, so a press costs a few small draws, not a window capture. The
-     * blur itself is a RenderEffect on the ImageView. Any failure just leaves the plain bubble.
+     * Draws the keyboard window's patch under the bubble (screen rect [left], [top], [w] x [h]) into an eighth-size bitmap
+     * (only the views that intersect the patch are drawn), blurs it and hands it to [frost]. Any failure leaves the plain bubble.
      */
     private fun captureFrost(key: View, left: Int, top: Int, w: Int, h: Int): Boolean {
-        val fv = frostView ?: return false
+        val fr = frost ?: return false
         return try {
             val root = key.rootView
             val rl = IntArray(2); root.getLocationOnScreen(rl)
-            val sc = 0.25f
-            val bw = (w * sc).toInt().coerceAtLeast(8)
-            val bh = (h * sc).toInt().coerceAtLeast(8)
-            val bmp = frostBmp?.takeIf { it.width == bw && it.height == bh && !it.isRecycled }
-                ?: android.graphics.Bitmap.createBitmap(bw, bh, android.graphics.Bitmap.Config.ARGB_8888).also { frostBmp = it }
+            val bw = (w / 8).coerceAtLeast(6)
+            val bh = (h / 8).coerceAtLeast(6)
+            val bmp = android.graphics.Bitmap.createBitmap(bw, bh, android.graphics.Bitmap.Config.ARGB_8888)
             bmp.eraseColor(t.background or 0xFF000000.toInt())          // where the patch sticks out of the window: the shell tone, never black
             val c = Canvas(bmp)
             c.scale(bw.toFloat() / w, bh.toFloat() / h)
             c.translate((rl[0] - left).toFloat(), (rl[1] - top).toFloat())
             root.draw(c)
-            fv.setImageBitmap(bmp)
+            fr.setBackdrop(softened(bmp))
             true
         } catch (_: Throwable) { false }
     }
+
+    /** Two 3x3 box-blur passes over a bitmap of a few hundred pixels: cheap, and the stretch on draw smooths it further. */
+    private fun softened(bmp: android.graphics.Bitmap): android.graphics.Bitmap {
+        val w = bmp.width; val h = bmp.height
+        var src = IntArray(w * h); bmp.getPixels(src, 0, w, 0, 0, w, h)
+        var dst = IntArray(w * h)
+        repeat(2) {
+            for (y in 0 until h) for (x in 0 until w) {
+                var r = 0; var g = 0; var b = 0
+                for (dy in -1..1) {
+                    val yy = (y + dy).coerceIn(0, h - 1)
+                    for (dx in -1..1) {
+                        val p = src[yy * w + (x + dx).coerceIn(0, w - 1)]
+                        r += (p shr 16) and 255; g += (p shr 8) and 255; b += p and 255
+                    }
+                }
+                dst[y * w + x] = (0xFF shl 24) or ((r / 9) shl 16) or ((g / 9) shl 8) or (b / 9)
+            }
+            val swap = src; src = dst; dst = swap
+        }
+        bmp.setPixels(src, 0, w, 0, 0, w, h)
+        return bmp
+    }
+
     /** Opt-in (Settings > Liquid lens, off by default: it re-renders the keyboard window per press and lags): a liquid-glass bubble that bends the keys around it. Otherwise the plain frosted bubble above: a near-opaque key-tone tint with a soft top light, hairline and shadow, no per-frame backdrop work. */
     private val lens: LensView? = if (t.isGlass && LensView.available() && Prefs.bool(ctx, "lens", false)) LensView(ctx, t) else null
     /** Holds the lens AND the plain bubble; [show] picks one per press (the lens has nothing to refract where it sticks out above the keyboard window). */
     private val face: View = FrameLayout(ctx).apply {
         clipChildren = false; clipToPadding = false
-        frostView?.let { addView(it, FrameLayout.LayoutParams(-1, -1)) }
         addView(bubble, FrameLayout.LayoutParams(-1, -1))
         lens?.let { addView(it, FrameLayout.LayoutParams(-1, -1)); bubble.visibility = View.GONE }
     }
@@ -244,8 +254,7 @@ class KeyPreview(ctx: Context, private val t: KbTokens) {
         val geomChanged = Math.abs(oldX - stageX) > 2 || Math.abs(oldY - stageY) > 2 || Math.abs(oldW - stageW) > 2 || Math.abs(oldH - stageH) > 2
         bubble.text = glyph
         val useFrost = !useLens && captureFrost(key, bx, loc[1] + 2.dp - bh, bw, bh)
-        frostView?.visibility = if (useFrost) View.VISIBLE else View.GONE
-        val wantBg = if (useFrost) frostBg else solidBg
+        val wantBg: Drawable? = if (useFrost) frost else solidBg
         if (wantBg != null && bubble.background !== wantBg) bubble.background = wantBg
         if (useLens) lens?.aim(key, glyph)
         val sameKey = owner === key
@@ -929,4 +938,37 @@ class KeyView(
         preview?.hide(this)
         super.onDetachedFromWindow()
     }
+}
+
+/** Bubble background: a small blurred backdrop clipped to the rounded shape, then the [tint] drawable (the key-tone glass) over it. */
+internal class FrostDrawable(private val tint: Drawable, private val radius: Float) : Drawable() {
+    private var backdrop: android.graphics.Bitmap? = null
+    private val paint = android.graphics.Paint(android.graphics.Paint.FILTER_BITMAP_FLAG or android.graphics.Paint.ANTI_ALIAS_FLAG)
+    private val clip = android.graphics.Path()
+    private val rf = android.graphics.RectF()
+
+    fun setBackdrop(b: android.graphics.Bitmap) { backdrop = b; invalidateSelf() }
+
+    override fun onBoundsChange(bounds: android.graphics.Rect) {
+        tint.bounds = bounds
+        rf.set(bounds)
+        clip.reset(); clip.addRoundRect(rf, radius, radius, android.graphics.Path.Direction.CW)
+    }
+
+    override fun draw(canvas: Canvas) {
+        val b = backdrop
+        if (b != null && !b.isRecycled) {
+            val save = canvas.save()
+            canvas.clipPath(clip)
+            canvas.drawBitmap(b, null, bounds, paint)
+            canvas.restoreToCount(save)
+        }
+        tint.draw(canvas)
+    }
+
+    override fun setAlpha(alpha: Int) { tint.alpha = alpha }
+    override fun setColorFilter(cf: android.graphics.ColorFilter?) { tint.colorFilter = cf }
+    @Suppress("OVERRIDE_DEPRECATION")
+    override fun getOpacity() = android.graphics.PixelFormat.TRANSLUCENT
+    override fun getOutline(outline: android.graphics.Outline) { tint.getOutline(outline) }
 }
